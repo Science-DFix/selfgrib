@@ -186,7 +186,7 @@ por padrão.
 history.nc (malha nativa MPAS, 55 niveis)
       |
       v
-[extract_fields]  -- interpolacao VERTICAL (native levels -> 55 niveis de pressao fixa)
+[extract_fields]  -- interpolacao VERTICAL (native levels -> 61 niveis de pressao fixa)
       |             ainda na malha nativa (nCells), sem nenhuma interpolacao horizontal
       v
 extracted_fields.nc
@@ -262,13 +262,15 @@ lapse-rate de 6.5 K/km abaixo do solo). Optamos por reaproveitar o método
 do MPAS porque estamos gerando dado **para o próprio MPAS consumir** — mais
 consistência, menos risco de introduzir uma convenção divergente.
 
-### 5.1. Os 55 níveis de pressão-alvo
+### 5.1. Os 61 níveis de pressão-alvo
 
-Não são uma lista genérica (tipo os 21-38 níveis padrão de GFS/CFSR). São a
-**mediana real de pressão de cada um dos 55 níveis de modelo nativos do
-MPAS-A**, calculada sobre as células interiores de um recorte de teste
-(América do Sul, rodada 2026-01-02_00). Preserva o mesmo espaçamento
-vertical do modelo (denso na baixa/média troposfera, esparso no topo) — ver
+Não são uma lista genérica (tipo os 21-38 níveis padrão de GFS/CFSR). 55
+deles são a **mediana real de pressão de cada um dos 55 níveis de modelo
+nativos do MPAS-A**, calculada sobre as células interiores de um recorte
+de teste (América do Sul, rodada 2026-01-02_00), preservando o mesmo
+espaçamento vertical do modelo (denso na baixa/média troposfera, esparso
+no topo). Os outros 6 (1, 2, 3, 5, 7, 10 hPa) são um buffer de margem
+vertical no topo — ver §6.1, bug do `extrap_type`, para o porquê. Ver
 `src/pressure_levels.F90` para a lista completa e o comentário com a
 proveniência exata.
 
@@ -279,14 +281,21 @@ fonte) — bem mais que os 8 níveis de pressão que o stream `diagnostics`
 nativos completos), não o `diag.nc`.
 
 **Comparação direta com um arquivo de produção real** (`ungrib` +
-GFS 0.25°, `FILE:2025-12-28_00` de uma rodada operacional): a estrutura de
-campos bate integralmente (mesmos pseudo-níveis 200100/201300 Pa, mesma
-convenção de nomes de solo `SM*/ST*`). Duas diferenças, ambas esperadas:
-nosso alcance vertical vai só até ~12 hPa (o próprio topo do MPAS,
-`config_ztop=30000m`) contra 1 hPa do GFS (que o MPAS nunca usaria mesmo
-assim); e o `EARTH_RADIUS` do arquivo de produção real é **6371.229** km
-(raio da própria esfera da malha MPAS, `sphere_radius` no netCDF) — usamos
-o mesmo valor, não o 6370.0 legado do WPS/`ungrib`.
+GFS 0.25°, `FILE:2025-12-28_00` de uma rodada operacional, lido com um
+parser próprio do formato binário intermediário — ver §6.1 para o motivo):
+a estrutura de campos bate integralmente (mesmos pseudo-níveis
+200100/201300 Pa, mesma convenção de nomes de solo `SM*/ST*`). O
+`EARTH_RADIUS` do arquivo de produção real é **6371.229** km (raio da
+própria esfera da malha MPAS, `sphere_radius` no netCDF) — usamos o mesmo
+valor, não o 6370.0 legado do WPS/`ungrib`.
+
+Quanto ao alcance vertical: o GFS real vai até **100 Pa = 1 hPa** (34
+níveis distintos, de 100 a 100000 Pa), bem além do topo nativo do MPAS
+(~12 hPa, `config_ztop=30000m`). Isso não é só uma curiosidade — é a razão
+de existirem os 6 níveis de buffer no topo de `plevels_hPa` (ver §6.1,
+bug do `extrap_type`): reproduzimos esse mesmo teto (1 a 10 hPa) para dar
+ao `init_atmosphere_model` a mesma margem vertical que ele já recebe em
+produção.
 
 ---
 
@@ -294,11 +303,11 @@ o mesmo valor, não o 6370.0 legado do WPS/`ungrib`.
 
 | Campo (WPS) | Nível(is) | Unidade | Fonte no `history.nc` | Como é obtido |
 |---|---|---|---|---|
-| `TT` | 55 níveis de pressão | K | `theta`, `pressure` | `T = theta*(p/p0)^(Rd/cp)`, interpolado |
-| `UU` / `VV` | 55 níveis de pressão | m/s | `uReconstructZonal/Meridional` | interpolado (`interp_tofixed_pressure`) |
-| `GHT` | 55 níveis de pressão | m | `zgrid` | altura do nível de massa = média das 2 interfaces, interpolado |
-| `SPECHUMD` | 55 níveis de pressão | kg/kg | `qv` | `q = qv/(1+qv)`, interpolado |
-| `RH` | 55 níveis de pressão | % | `relhum` | já em %, só interpolado |
+| `TT` | 61 níveis de pressão | K | `theta`, `pressure` | `T = theta*(p/p0)^(Rd/cp)`, interpolado |
+| `UU` / `VV` | 61 níveis de pressão | m/s | `uReconstructZonal/Meridional` | interpolado (`interp_tofixed_pressure`) |
+| `GHT` | 61 níveis de pressão | m | `zgrid` | altura do nível de massa = média das 2 interfaces, interpolado |
+| `SPECHUMD` | 61 níveis de pressão | kg/kg | `qv` | `q = qv/(1+qv)`, interpolado |
+| `RH` | 61 níveis de pressão | % | `relhum` | já em %, só interpolado |
 | `TT`/`UU`/`VV`/`SPECHUMD`/`RH` | pseudo-nível 200100 Pa | K, m/s, kg/kg, % | `t2m`,`u10`,`v10`,`q2` | direto (2m/10m); `RH` a 2m via pressão de vapor de `q2`+`psfc` sobre saturação de Bolton |
 | `PSFC` | 200100 Pa | Pa | `surface_pressure` | direto |
 | `PMSL` | 201300 Pa | Pa | (calculado) | `compute_slp` (seção 4), convertido hPa→Pa |
@@ -325,18 +334,40 @@ netCDF** (não assumidas), exceto onde indicado como "calculado".
 - **`EARTH_RADIUS`**: usava 6370.0 (legado WPS); corrigido para 6371.229
   (raio real da malha MPAS), após comparar com um arquivo de produção real.
 - **`config_nfglevels` do `init_atmosphere_model` (namelist consumidor,
-  não deste código)**: o valor certo para uma saída deste pipeline é
-  **56**, não 55 (número de níveis de pressão em `pressure_levels.F90`)
-  nem 57 (total de `LEVEL=` distintos que aparecem no arquivo, contados
-  com `tools/rd_intermediate.exe`). O pseudo-nível `201300` (`PMSL`) é
-  gravado como um campo 2D isolado — como `PSFC`/`SKINTEMP` — e não é uma
-  camada vertical interpolável; o `init_atmosphere_model` não o conta.
-  Confirmado ao vivo: com `config_nfglevels=57` o modelo lia um nível a
-  mais que o real (dado não inicializado) e travava em
+  não deste código)**: precisa contar exatamente os níveis de pressão de
+  `plevels_hPa` (atualmente 61, ver bug seguinte) + 1 pseudo-nível de
+  superfície `200100`. O pseudo-nível `201300` (`PMSL`) é gravado como um
+  campo 2D isolado — como `PSFC`/`SKINTEMP` — e não é uma camada vertical
+  interpolável; o `init_atmosphere_model` não o conta. Confirmado ao vivo:
+  contar o `201300` a mais faz o modelo ler um nível a mais que o real
+  (dado não inicializado) e travar em
   `ERROR: extrap_type == 2 not implemented for target_z >= zf(1,nz)`
-  seguido de segfault; o próprio log, com o valor certo, mostra
-  `Found 56 levels in the first-guess data` (55 níveis de pressão fixos +
-  1 pseudo-nível de superfície `200100`).
+  seguido de segfault.
+
+- **Sem margem vertical no topo → mesmo erro `extrap_type == 2`, mesmo com
+  `config_nfglevels` correto (2026-09-05)**: os 55 níveis de pressão
+  originais de `plevels_hPa` são a *mediana* da pressão de cada nível
+  nativo do MPAS, calculada numa rodada de referência. Isso deixa margem
+  ~zero no topo: o nível mais alto (12.24 hPa) representa a altura
+  *mediana* do último nível de modelo, então em boa parte das células (e
+  em rodadas com atmosfera um pouco mais fria/comprimida no topo que a de
+  referência) a altura real do topo do domínio MPAS excede a altura do
+  topo dos dados de first-guess. O `init_atmosphere_model` não sabe
+  extrapolar T acima do topo do first-guess nesse caso (`extrap_type==2`)
+  e trava — mesmo com `config_nfglevels` certo, porque a causa não é a
+  contagem de níveis, é a cobertura vertical. Confirmado ao vivo: o erro
+  persistiu após corrigir `config_nfglevels` para 56.
+
+  **Correção**: adicionados 6 níveis de pressão extras no topo de
+  `plevels_hPa` — 1, 2, 3, 5, 7, 10 hPa — os *mesmos* níveis que o
+  `ungrib`/GFS de produção já usa acima de 12 hPa (confirmado lendo os
+  headers de um `FILE:*` real, §5.1: o GFS vai até 100 Pa = 1 hPa). Não é
+  um buffer arbitrário: reproduz o teto vertical que o
+  `init_atmosphere_model` já consome sem erro em produção. `N_PLEVELS`
+  passou de 55 para 61; `config_nfglevels` correto agora é **62** (61 +
+  1 pseudo-nível de superfície). Qualquer mudança em `plevels_hPa` exige
+  recompilar o `mpas2intermediate` **e reprocessar todos os arquivos
+  `MPAS:*` já gerados** — o formato/conteúdo deles muda.
 
 ---
 

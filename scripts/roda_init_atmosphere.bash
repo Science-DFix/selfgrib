@@ -13,10 +13,12 @@
 #
 # Adapta os templates de namelist/streams do init_atmosphere_model:
 #   - config_met_prefix: 'FILE' -> PREFIXO ('MPAS')
-#   - config_nfglevels: 38 (GFS) -> 56 (55 níveis de pressão fixos do
-#     selfgrib + 1 pseudo-nível de superfície 200100 Pa — NÃO conta o
-#     pseudo-nível 201300/PMSL, que é um campo 2D isolado. Ver comentário
-#     mais abaixo, junto de N_FGLEVELS, para o detalhe completo)
+#   - config_nfglevels: 38 (GFS) -> 62 (61 níveis de pressão do selfgrib,
+#     incluindo os 6 níveis de buffer no topo — ver
+#     mpas2intermediate/src/pressure_levels.F90 — + 1 pseudo-nível de
+#     superfície 200100 Pa — NÃO conta o pseudo-nível 201300/PMSL, que é
+#     um campo 2D isolado. Ver comentário mais abaixo, junto de
+#     N_FGLEVELS, para o detalhe completo)
 #   - config_block_decomp_file_prefix e filename_template dos streams:
 #     x1.<malha global> -> <REGION_NAME> (malha recortada)
 #
@@ -48,17 +50,30 @@ START_TIME="${START_TIME:-2026-01-01_00:00:00}"
 NP_RUN="${NP_RUN:-32}"
 
 # --- Constante do selfgrib: número de niveis verticais interpolaveis no
-#     arquivo intermediario. NAO e o total de LEVEL= distintos (57, ver
-#     rd_intermediate.exe) -- o pseudo-nivel 201300 Pa (PMSL) e um campo 2D
-#     isolado (como PSFC/SKINTEMP), nao uma camada vertical, e por isso NAO
-#     conta para config_nfglevels. Testado na pratica: com 57 o
-#     init_atmosphere_model segfaultava em "extrap_type == 2 not
-#     implemented for target_z >= zf(1,nz)" (extrapolava 1 nivel a mais,
-#     com dado nao inicializado); o proprio log confirma o valor certo:
-#     "Found 56 levels in the first-guess data" = 55 niveis de pressao
-#     fixos (mpas2intermediate/src/pressure_levels.F90 :: N_PLEVELS) + 1
-#     pseudo-nivel de superficie (200100 Pa).
-N_FGLEVELS="${N_FGLEVELS:-56}"
+#     arquivo intermediario. NAO e o total de LEVEL= distintos -- o
+#     pseudo-nivel 201300 Pa (PMSL) e um campo 2D isolado (como
+#     PSFC/SKINTEMP), nao uma camada vertical, e por isso NAO conta para
+#     config_nfglevels.
+#
+#     Historico: com config_nfglevels=56 (55 niveis de pressao +
+#     1 pseudo-nivel de superficie) o init_atmosphere_model ainda
+#     segfaultava em "extrap_type == 2 not implemented for target_z >=
+#     zf(1,nz)", porque os 55 niveis de pressao originais (mediana de
+#     cada nivel de modelo numa rodada de referencia) nao davam margem no
+#     topo -- ver o comentario completo em
+#     mpas2intermediate/src/pressure_levels.F90. A correcao foi adicionar
+#     6 niveis de pressao extras no topo (1,2,3,5,7,10 hPa -- os MESMOS
+#     niveis que o `ungrib`/GFS real ja usa em producao acima de 12 hPa,
+#     confirmados lendo um FILE:* real com um parser do formato
+#     intermediario), levando N_PLEVELS de 55 para 61. Portanto
+#     config_nfglevels correto agora e 62 (61 niveis de pressao + 1
+#     pseudo-nivel de superficie 200100 Pa).
+#
+#     Isso exige recompilar o mpas2intermediate e REPROCESSAR (regerar)
+#     todos os arquivos MPAS:* existentes antes de rodar de novo -- a
+#     mudanca em pressure_levels.F90 muda o formato/conteudo desses
+#     arquivos.
+N_FGLEVELS="${N_FGLEVELS:-62}"
 
 # --- Diretório de trabalho da rodada ---
 WORK_DIR="${WORK_DIR:-${DIR_MALHA}/init_run}"
