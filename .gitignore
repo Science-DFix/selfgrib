@@ -1,0 +1,21 @@
+# artefatos de compilacao (reproduzem via `make`)
+mpas2intermediate/obj/
+mpas2intermediate/extract_fields
+mpas2intermediate/pack_intermediate
+mpas2intermediate/test_interp
+convert_mpas/convert_mpas
+convert_mpas/src/*.o
+convert_mpas/src/*.mod
+
+# saidas de teste (grandes, regeneraveis)
+MPAS-Limited-Area/*.nc
+MPAS-Limited-Area/*.graph.info
+*.grib2
+*.grb
+
+# metadados do Windows/WSL
+*:Zone.Identifier
+
+# saidas de rodada (nao versionar dados/resultados)
+/tmp/
+*.log

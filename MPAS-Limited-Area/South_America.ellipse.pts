@@ -1,0 +1,6 @@
+Name: SouthAmerica
+Type: ellipse
+Point: -15.0, -60.0        # centro aproximado do continente (MT, Brasil)
+Semi-major-axis: 4700000   # metros, eixo N-S (cobre ~25.5N a ~-57.3S)
+Semi-minor-axis: 3000000   # metros, eixo L-O (cobre ~-88W a ~-32W na latitude do centro)
+Orientation-angle: 0.0     # eixo maior alinhado ao norte verdadeiro (N-S)

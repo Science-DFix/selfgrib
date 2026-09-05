@@ -1,0 +1,90 @@
+GRIB1| Level| From |  To  | metgrid  | metgrid | metgrid                                 |
+Param| Type |Level1|Level2| Name     | Units   | Description                             |
+-----+------+------+------+----------+---------+-----------------------------------------+
+   7 | 100  |   *  |      | HGT      | m       | Geopotential Height                     |
+  11 | 100  |   *  |      | TT       | K       | Absolute Temperature                    |
+  33 | 100  |   *  |      | UU       | m s-1   | Zonal Wind (u)                          |
+  34 | 100  |   *  |      | VV       | m s-1   | Meridional Wind (v)                     |
+  52 | 100  |   *  |      | RH       | %       | Relative Humidity                       |
+ 128 | 105  |   2  |      | TT       | K       | Temperature                   at 2 m    |
+ 129 | 105  |   2  |      | DEWPT    | K       | Dewpoint Temperature           at 2 m   |
+ 130 | 105  |  10  |      | UU       | m s-1   | Zonal Wind (u)                at 10 m   |
+ 131 | 105  |  10  |      | VV       | m s-1   | Meridional Wind (v)           at 10 m   |
+ 135 |   1  |   0  |      | PSFC     | Pa      | Surface Pressure                        |
+   2 | 102  |   0  |      | PMSL     | Pa      | Sea-level Pressure                      |
+ 132 |   1  |   0  |      | SOILHGT  | m       | Terrain field of source analysis        |
+  81 |   1  |   0  |      | LANDSEA  | proprtn | Land/Sea flag (1=land, 0=sea)           |
+ 187 |   1  |   0  |      | SKINTEMP | K       | Surface (skin) Temperature              |
+-----+------+------+------+----------+---------+-----------------------------------------+
+#
+#  Vtable.BAM -- RASCUNHO -- CPTEC/INPE BAM (TQ0666L064), produto GPOS (P = pressure levels)
+#
+#  Construido a partir de:
+#   1) inspecao byte-a-byte do GRIB real (eccodes grib_get, campo por campo) em 2026-08-27
+#   2) o .ctl (GrADS) oficial do CPTEC pro mesmo produto, fornecido pelo usuario, que CONFERE
+#      exatamente com os codigos numericos brutos lidos do arquivo (nao apenas com os nomes
+#      textuais que o eccodes tentou decodificar sozinho -- esses divergiam do .ctl para os
+#      campos de 2m/10m e para PMSL, ver nota abaixo).
+#
+#  GRIB1, center = 46 (sbsj / INPE), table2Version = 254 (TABELA LOCAL DO CPTEC, nao e a
+#  tabela padrao OMM). Os codigos de parametro acima so valem para arquivos deste mesmo
+#  center+table2Version -- nao reaproveitar em outra fonte.
+#
+#  Nota tecnica: o eccodes instalado aqui rotula o "level type" de 128/129/130/131 como
+#  texto "sfc" e nao decodifica "levelType" corretamente para esses -- os bytes brutos
+#  (indicatorOfTypeOfLevel) confirmam 105 (altura acima do solo), batendo com o .ctl.
+#  Sempre que o eccodes e a documentacao do centro divergirem, usar grib_get no campo
+#  numerico bruto (indicatorOfTypeOfLevel:i), nao o nome textual.
+#
+#  *** STATUS (validado rodando o ungrib.exe de verdade em 2026-08-27) ***
+#
+#  1) [RESOLVIDO] PSFC (135) e PMSL (2) vêm no arquivo bruto em hPa. Corrigido com
+#     patch em ungrib/src/rrpr.F (multiplica por 100 quando map%source ==
+#     'CPTEC/INPE BAM', setado em rd_grib1.F ao reconhecer icenter=46) e validado:
+#     PSFC=100610 Pa, PMSL=100584 Pa no ponto de teste. IMPORTANTE: o patch e
+#     gated especificamente por 'CPTEC/INPE BAM', NAO por 'CPTEC' genérico --
+#     o mesmo center 46 tambem aparece no Eta (GRIB2, ja em Pa), e um match
+#     generico duplicaria a conversao la (bug real que apareceu e foi corrigido
+#     durante a validacao).
+#
+#  2) [RESOLVIDO] RH (UMRL, pressure-level) vem como fracao 0-1 no arquivo bruto
+#     ("NO DIM" no .ctl), mas metgrid/real.exe esperam percentual 0-100. Mesmo
+#     patch/mesmo gate acima, multiplica por 100 SO nos niveis de pressao
+#     (plvl < 200000) -- a RH de superficie (pseudo-nivel 200100) e computada
+#     por rrpr.F via TT+DEWPT (compute_rh_dewpt) e ja sai em percentual, entao
+#     NAO deve ser tocada de novo (bug que tambem apareceu e foi corrigido).
+#     Validado: perfil vertical de RH agora 0-100% em todos os 33 niveis.
+#
+#  3) [EM ABERTO -- decisao: aguardando confirmacao interna no CPTEC] Campos de
+#     solo (85 dstp, 182 ussl, 183 uzrs, 184 uzds) NAO incluidos no Vtable ativo.
+#     Motivo nao e so falta de dado no GRIB (topLevel=bottomLevel=0 nos bytes) --
+#     e estrutural: o esquema SSiB do BAM define zona de raiz e zona de drenagem
+#     com profundidade DEPENDENTE DO TIPO DE VEGETACAO de cada celula (Xue et al.
+#     1991), enquanto o formato Vtable so aceita UMA profundidade fixa global por
+#     nome de campo (ex. SM040100 = 40-100cm em todo lugar). Ou seja, mesmo com a
+#     documentacao exata em maos, uma unica linha de Vtable e uma aproximacao, nao
+#     uma representacao exata. Nomes-alvo que o MPAS-A e o WRF aceitam (confirmado
+#     em MPAS-Model/src/core_init_atmosphere/mpas_init_atm_cases.F:3548-3557,3566-3575):
+#     SM000010/SM010040/SM040100/SM100200 (+ST equivalentes) OU
+#     SM000007/SM007028/SM028100/SM100289 (+ST equivalentes) OU SOILM001..SOILM999.
+#     O LSM Noah do MPAS usa nativamente 10/40/100/200cm como grade-alvo fixa
+#     (mpas_atmphys_initialize_real.F:307-324), entao essa e a convencao preferencial
+#     se/quando os valores reais forem confirmados.
+#
+#  4) [CONFIRMADO AUSENTE, nao e bug] SNOW (agua equivalente de neve) e SEAICE nao
+#     existem neste produto GPOS -- conferido na lista completa de 71 variaveis do
+#     .ctl oficial do CPTEC: so ha NEVE (SNOWFALL, taxa kg/m2/dia, nao profundidade
+#     acumulada) e nenhum campo de gelo marinho. Nao e algo que um Vtable resolve;
+#     precisaria de outro produto/stream do CPTEC ou outra fonte so pra esses dois.
+#
+#  4) TSFC (187, usado acima p/ SKINTEMP) e TEMS (188, "surface absolute temperature")
+#     sao dois candidatos distintos pra temperatura de superficie -- escolhi TSFC por
+#     ser a leitura mais direta de "temperatura de superficie", mas confirmar com a
+#     documentacao do BAM/SSiB qual e de fato a temperatura de pele (skin) usada pelo
+#     WRF/Noah no acoplamento solo-atmosfera.
+#
+#  5) UVES/VVES (192/194, "surface" u/v, level type 1) existem no arquivo mas foram
+#     deliberadamente OMITIDOS -- parecem ser o vento do primeiro nivel do modelo,
+#     redundante com U10M/V10M (130/131) que e o campo diagnostico padrao esperado
+#     pelo metgrid.
+#

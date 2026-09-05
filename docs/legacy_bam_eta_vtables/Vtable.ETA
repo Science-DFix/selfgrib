@@ -1,0 +1,54 @@
+GRIB1| Level| From |  To  | metgrid  | metgrid | metgrid                                 |GRIB2|GRIB2|GRIB2|GRIB2|
+Param| Type |Level1|Level2| Name     | Units   | Description                             |Discp|Catgy|Param|Level|
+-----+------+------+------+----------+---------+-----------------------------------------+-----------------------+
+   7 | 100  |   *  |      | HGT      | m       | Geopotential Height                     |  0  |  3  |  5  | 100 |
+  11 | 100  |   *  |      | TT       | K       | Temperature                             |  0  |  0  |  0  | 100 |
+  33 | 100  |   *  |      | UU       | m s-1   | U                                       |  0  |  2  |  2  | 100 |
+  34 | 100  |   *  |      | VV       | m s-1   | V                                       |  0  |  2  |  3  | 100 |
+  52 | 100  |   *  |      | RH       | %       | Relative Humidity                       |  0  |  1  |  1  | 100 |
+  11 | 105  |   2  |      | TT       | K       | Temperature       at 2 m                |  0  |  0  |  0  | 103 |
+  17 | 105  |   2  |      | DEWPT    | K       | Dewpoint Temperature at 2 m              |  0  |  0  |  6  | 103 |
+  52 | 105  |   2  |      | RH       | %       | Relative Humidity at 2 m                |  0  |  1  |  1  | 103 |
+  33 | 105  |  10  |      | UU       | m s-1   | U                 at 10 m               |  0  |  2  |  2  | 103 |
+  34 | 105  |  10  |      | VV       | m s-1   | V                 at 10 m               |  0  |  2  |  3  | 103 |
+   1 |   1  |   0  |      | PSFC     | Pa      | Surface Pressure                        |  0  |  3  |  0  |   1 |
+   2 | 102  |   0  |      | PMSL     | Pa      | Sea-level Pressure                      |  0  |  3  |  1  | 101 |
+  11 |   1  |   0  |      | SKINTEMP | K       | Surface (skin) Temperature               |  0  |  0  |  0  |   1 |
+-----+------+------+------+----------+---------+-----------------------------------------+-----------------------+
+#
+#  Vtable.ETA -- RASCUNHO -- CPTEC/INPE modelo Eta (ams_08km), produto GRIB2 horario
+#
+#  Construido por inspecao byte-a-byte (eccodes) de um arquivo real em 2026-08-27:
+#  https://dataserver.cptec.inpe.br/dataserver_modelos/eta/ams_08km/brutos/.../Eta_ams_08km_....grib2
+#
+#  GRIB2, center = 46 (sbsj / INPE). Ao contrario do BAM (GRIB1, tabela local 254), este
+#  arquivo usa discipline/category/parameter PADRAO da OMM -- por isso os codigos GRIB2
+#  abaixo sao os MESMOS que Vtable.GFS/Vtable.NAM ja usam para os mesmos campos (nao e
+#  coincidencia: e o proprio ponto do GRIB2 ser mais padronizado que o GRIB1).
+#
+#  PSFC e PMSL neste arquivo JA VEM EM PASCAL (confirmado: sp min/max ~48430-103102 Pa) --
+#  ao contrario do BAM, NAO precisa de nenhum patch de unidade em rrpr.F.
+#
+#  *** STATUS (validado rodando o ungrib.exe de verdade em 2026-08-27) ***
+#
+#  1) [RESOLVIDO/nao aplicavel] PSFC (Pa) e PMSL (Pa) confirmados corretos sem
+#     patch (48430-103102 Pa, batendo exato com a leitura crua via eccodes).
+#     DEWPT e SKINTEMP validados rodando de verdade -- casaram no inventario e
+#     produziram valores fisicamente plausiveis (SKINTEMP~280K no ponto de teste).
+#     SOILHGT/LANDSEA/SNOW/SEAICE nao existem neste produto horario (conferido nas
+#     46 variaveis do .ctl oficial: so ha ASNOWsfc, que e taxa de nevada acumulada
+#     no periodo, nao profundidade de neve, e nenhum campo de gelo marinho) -- mas
+#     como os estaticos do MPAS-A vem prontos por fora, isso deixou de bloquear.
+#
+#  2) [EM ABERTO -- decisao: aguardando confirmacao interna no CPTEC] Solo
+#     (st=temperatura, ssw=umidade, discipline 2 categoria 0) existe no arquivo
+#     com typeOfFirstFixedSurface=surface e typeOfSecondFixedSurface=106
+#     (depthBelowLandSurface), scaleFactor=0, scaledValue=1 e 2 -- ou seja, dois
+#     "niveis" cujo valor bruto e literalmente 1 e 2, sem deixar claro se sao
+#     metros (o que seria uma camada 0-1m e outra 0-2m, incomum) ou indices de
+#     camada do discretizacao interna do Eta/Noah (mais provavel, dado que o Eta
+#     do CPTEC descende do Eta/NCEP, cuja convencao classica de solo e Noah
+#     4-camadas 0-10/10-40/40-100/100-200cm -- ver a mesma nota no Vtable.BAM
+#     sobre os nomes que MPAS-A/WRF aceitam). NAO mapeado no Vtable ativo por
+#     falta de confirmacao -- nao e prudente supor "1m"/"2m" sem essa confirmacao.
+#
