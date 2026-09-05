@@ -1,0 +1,31 @@
+#!/bin/bash
+#PBS -S /bin/bash
+#PBS -q pesqmini
+#PBS -l select=1:ncpus=32
+#PBS -l walltime=00:30:00
+#PBS -N selfgrib_init
+#PBS -j oe
+#PBS -o selfgrib_init.out
+
+# ==============================================================================
+# submete_jaci_selfgrib.pbs — Sobe o experimento selfgrib (recorte regional +
+# pipeline meteorológico + init_atmosphere_model) como job PBS, no mesmo
+# padrão do submete_jaci.pbs de produção (../../scripts/submete_jaci.pbs).
+#
+# ncpus/NP=32 aqui é o menor dos particionamentos já gerados por
+# recorta_regiao.bash (32/64/128/256) — ajuste os dois juntos (#PBS -l
+# select=1:ncpus=N e NP=N abaixo) se quiser rodar com outro número de
+# processos.
+# ==============================================================================
+
+# --- Carregar ambiente (mesmo do wrf/wps em produção) ---
+source /lustre/projetos/satdas/diego_workdir/env_wrf_wps.bash
+export GFORTRAN_CONVERT_UNIT='big_endian:101-200'
+
+# --- NP para o master_run_selfgrib.bash (precisa bater com ncpus acima) ---
+export NP=${NP:-32}
+
+# --- Diretório do experimento (filesystem Lustre) ---
+cd /lustre/projetos/satdas/diego_workdir/SOURCE/ungrib_to_mpas/selfgrib/scripts || exit 1
+
+./master_run_selfgrib.bash

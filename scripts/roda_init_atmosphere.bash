@@ -13,8 +13,9 @@
 #
 # Adapta os templates de namelist/streams do init_atmosphere_model:
 #   - config_met_prefix: 'FILE' -> PREFIXO ('MPAS')
-#   - config_nfglevels: 38 (GFS) -> N_PLEVELS (55, níveis fixos do selfgrib
-#     — ver mpas2intermediate/src/pressure_levels.F90)
+#   - config_nfglevels: 38 (GFS) -> 57 (total de níveis distintos no arquivo
+#     intermediário do selfgrib: 55 níveis de pressão fixos +
+#     pseudo-níveis 200100/201300 Pa — confirmado com rd_intermediate.exe)
 #   - config_block_decomp_file_prefix e filename_template dos streams:
 #     x1.<malha global> -> <REGION_NAME> (malha recortada)
 #
@@ -45,9 +46,14 @@ DIR_EXE="${DIR_EXE:-/lustre/projetos/satdas/diego_workdir/build-mpich-single/bin
 START_TIME="${START_TIME:-2026-01-01_00:00:00}"
 NP_RUN="${NP_RUN:-32}"
 
-# --- Constante do selfgrib: número de níveis de pressão fixos gerados
-#     (ver mpas2intermediate/src/pressure_levels.F90 :: N_PLEVELS) ---
-N_PLEVELS="${N_PLEVELS:-55}"
+# --- Constante do selfgrib: total de níveis distintos no arquivo
+#     intermediário -- NÃO é só N_FGLEVELS (55, ver
+#     mpas2intermediate/src/pressure_levels.F90). config_nfglevels conta
+#     "atmospheric levels including surface and sea-level" (manual MPAS-A,
+#     apêndice A.3) -- os 55 níveis de pressão fixos MAIS os pseudo-níveis
+#     200100 Pa (superfície/2m/10m) e 201300 Pa (PMSL) = 57. Confirmado
+#     contando os LEVEL= distintos de um arquivo real com rd_intermediate.exe.
+N_FGLEVELS="${N_FGLEVELS:-57}"
 
 # --- Diretório de trabalho da rodada ---
 WORK_DIR="${WORK_DIR:-${DIR_MALHA}/init_run}"
@@ -98,7 +104,7 @@ cp -f "${FILE_BASE_INI}/namelist.init_atmosphere" .
 sed -i "s/^\([[:space:]]*config_start_time[[:space:]]*=\).*/\1 '${START_TIME}',/"                 namelist.init_atmosphere
 sed -i "s/^\([[:space:]]*config_stop_time[[:space:]]*=\).*/\1  '${START_TIME}',/"                  namelist.init_atmosphere
 sed -i "s/^\([[:space:]]*config_met_prefix[[:space:]]*=\).*/\1   '${PREFIXO}',/"                   namelist.init_atmosphere
-sed -i "s/^\([[:space:]]*config_nfglevels[[:space:]]*=\).*/\1     ${N_PLEVELS},/"                  namelist.init_atmosphere
+sed -i "s/^\([[:space:]]*config_nfglevels[[:space:]]*=\).*/\1     ${N_FGLEVELS},/"                  namelist.init_atmosphere
 sed -i "s/^\([[:space:]]*config_block_decomp_file_prefix[[:space:]]*=\).*/\1 '${REGION_NAME}.graph.info.part.',/" namelist.init_atmosphere
 
 # --- streams.init_atmosphere ---
