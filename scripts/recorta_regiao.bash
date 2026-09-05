@@ -27,7 +27,8 @@ PTS_FILE="${PTS_FILE:-${DIR_LIMITED_AREA}/South_America.ellipse.pts}"
 
 # --- Saída ---
 DIR_OUT="${DIR_OUT:-/lustre/projetos/satdas/diego_workdir/SOURCE/ungrib_to_mpas/recortes/SouthAmerica}"
-NP_PARTS="${NP_PARTS:-256}"   # numero de particoes MPI (gpmetis); vazio ("") desliga o particionamento
+NP_PARTS="${NP_PARTS:-32 64 128 256}"   # lista de particoes MPI (gpmetis), separadas por espaço; vazio ("") desliga o particionamento
+METIS_MODULE="${METIS_MODULE:-metis/5.1.0}"   # modulo a carregar se gpmetis nao estiver no PATH (module load); vazio ("") nao tenta carregar
 
 # --- Validações ---
 [ -f "$STATIC_GLOBAL" ] || { echo "ERRO: STATIC_GLOBAL não encontrado: $STATIC_GLOBAL"; exit 1; }
@@ -64,13 +65,20 @@ echo "OK: ${OUT_GRAPH}"
 
 # --- Particionamento opcional (gpmetis), para rodar com N tarefas MPI ---
 if [ -n "$NP_PARTS" ]; then
-    OUT_PART="${OUT_GRAPH}.part.${NP_PARTS}"
-    if [ -f "$OUT_PART" ]; then
-        echo "Já existe: ${OUT_PART} — pulando particionamento."
-    else
-        command -v gpmetis >/dev/null || { echo "ERRO: gpmetis não encontrado no PATH"; exit 1; }
-        echo "--- Particionando ${OUT_GRAPH} para ${NP_PARTS} tarefas MPI ---"
-        gpmetis -minconn -contig -niter=200 "$OUT_GRAPH" "$NP_PARTS"
+    if ! command -v gpmetis >/dev/null && [ -n "$METIS_MODULE" ] && command -v module >/dev/null; then
+        echo "gpmetis não está no PATH — tentando 'module load ${METIS_MODULE}'..."
+        module load "$METIS_MODULE"
     fi
-    echo "OK: ${OUT_PART}"
+    command -v gpmetis >/dev/null || { echo "ERRO: gpmetis não encontrado no PATH (defina METIS_MODULE ou carregue o modulo manualmente antes de rodar)"; exit 1; }
+
+    for N in $NP_PARTS; do
+        OUT_PART="${OUT_GRAPH}.part.${N}"
+        if [ -f "$OUT_PART" ]; then
+            echo "Já existe: ${OUT_PART} — pulando particionamento."
+        else
+            echo "--- Particionando ${OUT_GRAPH} para ${N} tarefas MPI ---"
+            gpmetis -minconn -contig -niter=200 "$OUT_GRAPH" "$N"
+        fi
+        echo "OK: ${OUT_PART}"
+    done
 fi
