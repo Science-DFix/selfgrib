@@ -1,15 +1,15 @@
 #!/bin/bash
 # ==============================================================================
-# roda_init_atmosphere.bash — Roda o init_atmosphere_model para gerar o
+# 03_roda_init_atmosphere.bash — Roda o init_atmosphere_model para gerar o
 # init.nc de uma malha regional recortada (MPAS-Limited-Area), usando os
 # arquivos meteorológicos intermediários gerados pelo pipeline selfgrib
 # (mpas2intermediate) como fonte, em vez de GFS/ungrib.
 #
 # Pré-requisitos (produzidos pelas etapas anteriores):
 #   - <REGION_NAME>.static.nc + <REGION_NAME>.graph.info.part.<NP_RUN>
-#     (ver scripts/recorta_regiao.bash)
+#     (ver scripts/01_recorta_regiao.bash)
 #   - <PREFIXO>:AAAA-MM-DD_HH em DIR_MET
-#     (ver scripts/roda_pipeline_meteorologico.bash)
+#     (ver scripts/02_roda_pipeline_meteorologico.bash)
 #
 # Adapta os templates de namelist/streams do init_atmosphere_model:
 #   - config_met_prefix: 'FILE' -> PREFIXO ('MPAS')
@@ -34,11 +34,11 @@ ENV_ALL="${ENV_ALL:-/lustre/projetos/satdas/diego_workdir/env_wrf_wps.bash}"
 # --- Templates de namelist/streams (mesmos usados em produção) ---
 FILE_BASE_INI="${FILE_BASE_INI:-/lustre/projetos/satdas/diego_workdir/SOURCE/FILE_BASE}"
 
-# --- Malha regional recortada (ver scripts/recorta_regiao.bash) ---
+# --- Malha regional recortada (ver scripts/01_recorta_regiao.bash) ---
 DIR_MALHA="${DIR_MALHA:-/lustre/projetos/satdas/diego_workdir/SOURCE/ungrib_to_mpas/recortes/SouthAmerica}"
 REGION_NAME="${REGION_NAME:-SouthAmerica}"
 
-# --- Arquivos meteorológicos intermediários (ver scripts/roda_pipeline_meteorologico.bash) ---
+# --- Arquivos meteorológicos intermediários (ver scripts/02_roda_pipeline_meteorologico.bash) ---
 DIR_MET="${DIR_MET:-${DIR_MALHA}/met_intermediate}"
 PREFIXO="${PREFIXO:-MPAS}"
 
@@ -82,7 +82,7 @@ WORK_DIR="${WORK_DIR:-${DIR_MALHA}/init_run}"
 STATIC_REGIONAL="${DIR_MALHA}/${REGION_NAME}.static.nc"
 GRAPH_PART="${DIR_MALHA}/${REGION_NAME}.graph.info.part.${NP_RUN}"
 [ -f "$STATIC_REGIONAL" ] || { echo "ERRO: static.nc regional não encontrado: $STATIC_REGIONAL"; exit 1; }
-[ -f "$GRAPH_PART" ]      || { echo "ERRO: graph.info particionado não encontrado: $GRAPH_PART (rode recorta_regiao.bash com NP_PARTS=\"... ${NP_RUN} ...\")"; exit 1; }
+[ -f "$GRAPH_PART" ]      || { echo "ERRO: graph.info particionado não encontrado: $GRAPH_PART (rode 01_recorta_regiao.bash com NP_PARTS=\"... ${NP_RUN} ...\")"; exit 1; }
 [ -f "${FILE_BASE_INI}/namelist.init_atmosphere" ] || { echo "ERRO: template não encontrado: ${FILE_BASE_INI}/namelist.init_atmosphere"; exit 1; }
 [ -f "${FILE_BASE_INI}/streams.init_atmosphere" ]  || { echo "ERRO: template não encontrado: ${FILE_BASE_INI}/streams.init_atmosphere"; exit 1; }
 [ -x "${DIR_EXE}/mpas_init_atmosphere" ] || { echo "ERRO: executável não encontrado: ${DIR_EXE}/mpas_init_atmosphere"; exit 1; }

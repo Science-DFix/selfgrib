@@ -1,9 +1,13 @@
 #!/bin/bash
 # ==============================================================================
 # master_run_selfgrib.bash — Orquestra o experimento selfgrib (Jaci):
-#   1) recorte da malha regional               (recorta_regiao.bash)
-#   2) pipeline meteorológico (selfgrib)        (roda_pipeline_meteorologico.bash)
-#   3) init_atmosphere_model (gera o init.nc)   (roda_init_atmosphere.bash)
+#   1) recorte da malha regional               (01_recorta_regiao.bash)
+#   2) pipeline meteorológico (selfgrib)        (02_roda_pipeline_meteorologico.bash)
+#   3) init_atmosphere_model (gera o init.nc)   (03_roda_init_atmosphere.bash)
+#
+# Os 3 scripts de etapa em scripts/ têm prefixo numérico (01_, 02_, 03_)
+# exatamente para deixar essa ordem óbvia mesmo rodando cada um à mão
+# (sem passar pelo master), fora deste orquestrador.
 #
 # Chamado pelo submete_jaci_selfgrib.pbs (mesmo padrão de
 # ../../scripts/master_run.bash + submete_jaci.pbs já usados em produção).
@@ -29,13 +33,13 @@ echo " NP_RUN : ${NP_RUN}"                                     | tee -a "$LOG"
 echo "======================================================" | tee -a "$LOG"
 
 echo "--- [1/3] Recorte da malha regional ---" | tee -a "$LOG"
-bash "${DIR_SCRIPTS}/recorta_regiao.bash" 2>&1 | tee -a "$LOG"
+bash "${DIR_SCRIPTS}/01_recorta_regiao.bash" 2>&1 | tee -a "$LOG"
 
 echo "--- [2/3] Pipeline meteorológico (selfgrib) ---" | tee -a "$LOG"
-bash "${DIR_SCRIPTS}/roda_pipeline_meteorologico.bash" 2>&1 | tee -a "$LOG"
+bash "${DIR_SCRIPTS}/02_roda_pipeline_meteorologico.bash" 2>&1 | tee -a "$LOG"
 
 echo "--- [3/3] init_atmosphere_model ---" | tee -a "$LOG"
-bash "${DIR_SCRIPTS}/roda_init_atmosphere.bash" 2>&1 | tee -a "$LOG"
+bash "${DIR_SCRIPTS}/03_roda_init_atmosphere.bash" 2>&1 | tee -a "$LOG"
 
 echo "======================================================" | tee -a "$LOG"
 echo " Fim: $(date)"                                           | tee -a "$LOG"

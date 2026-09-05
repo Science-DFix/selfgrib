@@ -1,6 +1,6 @@
 #!/bin/bash
 # ==============================================================================
-# roda_pipeline_meteorologico.bash — Gera os arquivos meteorológicos
+# 02_roda_pipeline_meteorologico.bash — Gera os arquivos meteorológicos
 # intermediários (formato WPS) a partir de uma rodada global do MPAS-A já
 # concluída, usando o pipeline selfgrib (extract_fields -> convert_mpas ->
 # pack_intermediate), via mpas2intermediate/run_pipeline.sh.

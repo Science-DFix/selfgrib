@@ -1,6 +1,6 @@
 #!/bin/bash
 # ==============================================================================
-# recorta_regiao.bash — Recorta uma malha regional a partir da malha global
+# 01_recorta_regiao.bash — Recorta uma malha regional a partir da malha global
 # do MPAS-A, reaproveitando o static.nc global (terreno, uso do solo,
 # climatologia de vegetação/albedo) via MPAS-Limited-Area (create_region).
 #
