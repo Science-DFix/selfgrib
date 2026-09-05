@@ -25,7 +25,7 @@
 program extract_fields
 
    use mpas_kind_types,  only : RKIND
-   use pressure_levels,  only : N_PLEVELS, plevels_hPa, LEVEL_SFC_PA, LEVEL_SEALVL_PA
+   use pressure_levels,  only : N_PLEVELS, N_BUFFER_TOP, plevels_hPa, LEVEL_SFC_PA, LEVEL_SEALVL_PA
    use interp_vertical,  only : interp_tofixed_pressure, compute_slp
    use netcdf
 
@@ -201,6 +201,50 @@ program extract_fields
    call interp_from_native(height_mass, ght_plev,       'GHT')
    call interp_from_native(spechum,     spechumd_plev, 'SPECHUMD')
    call interp_from_native(relhum,      rh_plev,       'RH')
+
+   !-------------------------------------------------------------------
+   ! Correcao fisica de GHT nos N_BUFFER_TOP niveis de buffer (indices
+   ! 1..N_BUFFER_TOP de plevels_hPa, ver pressure_levels.F90 "BUG 2").
+   !
+   ! interp_tofixed_pressure extrapola TODOS os campos acima do topo
+   ! nativo com a mesma formula (field_out = field_in(topo) *
+   ! pressao_alvo/pressao_topo), valida para campos que tendem a zero com
+   ! a pressao mas FISICAMENTE INVERTIDA para altura: como
+   ! pressao_alvo < pressao_topo nesses niveis, ela reduz a altura em vez
+   ! de aumentar. Sem esta correcao, os niveis de buffer ficam com GHT
+   ! ABAIXO do topo nativo (12.24 hPa) -- o buffer nao aumenta a
+   ! cobertura vertical nenhum pouco, e o init_atmosphere_model volta a
+   ! travar em "extrap_type == 2 not implemented for target_z >= zf(1,nz)"
+   ! mesmo com N_PLEVELS > 55 (confirmado ao vivo).
+   !
+   ! Aqui recalculamos GHT nesses niveis com extrapolacao hipsometrica
+   ! isotermica (T constante = temperatura do primeiro nivel nativo real,
+   ! indice N_BUFFER_TOP+1 = 12.24 hPa, ja calculada corretamente por
+   ! interpolacao de verdade), ancorada na altura desse mesmo nivel:
+   !
+   !   z(k) = z_ancora + (Rd*T_ancora/g) * ln(p_ancora/p(k))
+   !
+   ! Como p(k) < p_ancora para todo k <= N_BUFFER_TOP, ln(...) > 0 e a
+   ! altura resultante e SEMPRE maior que z_ancora, crescendo
+   ! monotonicamente conforme a pressao cai -- exatamente o que da
+   ! margem vertical real ao init_atmosphere_model. Nao precisa ser
+   ! fisicamente exata (isotermica e uma simplificacao grosseira da
+   ! estratosfera real): nenhuma celula do dominio MPAS chega perto
+   ! dessas altitudes, o unico requisito e monotonicidade.
+   !-------------------------------------------------------------------
+   block
+      real(kind=RKIND), parameter :: RD_GAS = 287.05_RKIND, GRAV = 9.80665_RKIND
+      real(kind=RKIND) :: z_ancora, p_ancora, t_ancora
+      integer :: iCell, kbuf
+      do iCell = 1, nCells
+         z_ancora = ght_plev(iCell, N_BUFFER_TOP+1)
+         p_ancora = press_out(iCell, N_BUFFER_TOP+1)
+         t_ancora = tt_plev(iCell, N_BUFFER_TOP+1)
+         do kbuf = N_BUFFER_TOP, 1, -1
+            ght_plev(iCell,kbuf) = z_ancora + (RD_GAS*t_ancora/GRAV) * log(p_ancora/press_out(iCell,kbuf))
+         end do
+      end do
+   end block
 
    write(0,*) 'Interpolacao vertical concluida para TT, UU, VV, GHT, SPECHUMD, RH (', N_PLEVELS, ' niveis).'
 

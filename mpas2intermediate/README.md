@@ -369,6 +369,41 @@ netCDF** (não assumidas), exceto onde indicado como "calculado".
   recompilar o `mpas2intermediate` **e reprocessar todos os arquivos
   `MPAS:*` já gerados** — o formato/conteúdo deles muda.
 
+- **A correção acima sozinha não resolveu nada — mesmo erro, mesmo com
+  `N_PLEVELS=61` (2026-09-05, confirmado ao vivo rodando interativamente
+  no nó)**: `interp_tofixed_pressure` usa a **mesma fórmula** de
+  extrapolação acima do topo para todos os campos, inclusive `GHT`:
+  `field_out = field_in(topo) * (pressão_alvo/pressão_topo)`. Essa fórmula
+  é plausível para campos que tendem a zero com a pressão, mas é
+  **fisicamente invertida para altura**: como `pressão_alvo < pressão_topo`
+  nos níveis de buffer, o resultado é uma altura *menor* que a do topo
+  nativo, não maior. Ou seja, os 6 níveis de buffer recebiam `GHT` **abaixo**
+  de 12.24 hPa — o buffer não aumentava a cobertura vertical nenhum pouco,
+  e o `init_atmosphere_model` continuava vendo o mesmo topo de sempre.
+
+  **Correção**: em `extract_fields.F90`, depois da chamada padrão de
+  `interp_from_native` para `GHT`, os `N_BUFFER_TOP` (6) níveis de buffer
+  são recalculados com extrapolação hipsométrica isotérmica, ancorada no
+  primeiro nível nativo real (12.24 hPa, já interpolado corretamente):
+  `z(k) = z_âncora + (Rd·T_âncora/g) · ln(p_âncora/p(k))`. Como
+  `p(k) < p_âncora`, o log é positivo e a altura cresce estritamente
+  conforme a pressão cai — não precisa ser fisicamente exata (é uma
+  atmosfera isotérmica simplificada), só precisa ser monotônica, já que
+  nenhuma célula real do domínio MPAS chega perto dessas altitudes.
+  Validado numericamente com um `history.nc` real: `GHT` passou a cair de
+  forma estritamente monotônica de ~46 km (1 hPa) até ~28 km (12.24 hPa)
+  em todas as células testadas.
+
+  **Achado à parte (não é a causa deste bug, mas fica registrado)**: ao
+  validar, ~49.6% das células do `history.nc` de teste têm alguma
+  inversão de altura entre pares de níveis *nativos* (não só no topo —
+  aparece também entre ~500-1000 hPa). É um comportamento pré-existente
+  de `interp_tofixed_pressure`/`height_mass` não relacionado a este bug
+  (não foi introduzido por nenhuma das duas correções acima) e não causa
+  o erro fatal de topo (que só dispara na checagem explícita de fronteira
+  do domínio) — mas pode valer investigar se aparecerem outros erros de
+  interpolação em níveis internos no futuro.
+
 ---
 
 ## 7. Ferramentas auxiliares

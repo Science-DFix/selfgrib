@@ -33,6 +33,27 @@
 ! topo do history.nc) nunca sao fisicamente relevantes, pois nenhuma
 ! celula real do dominio MPAS chega perto dessa altitude.
 !
+! BUG 2 REAL (2026-09-05, mesmo dia): a correcao acima sozinha NAO
+! resolveu o erro -- confirmado ao vivo, mesmo com N_PLEVELS=61 o
+! init_atmosphere_model continuou travando no mesmo
+! "extrap_type == 2 not implemented for target_z >= zf(1,nz)". Causa:
+! interp_tofixed_pressure usa a MESMA formula de extrapolacao acima do
+! topo para TODOS os campos, inclusive GHT: field_out = field_in(topo) *
+! (pressao_alvo/pressao_topo). Essa formula e plausivel para campos como
+! temperatura, mas e FISICAMENTE INVERTIDA para altura -- como
+! pressao_alvo < pressao_topo nos niveis de buffer, o resultado e uma
+! altura MENOR que a do topo nativo, nao maior. Ou seja, os 6 niveis de
+! buffer recebiam GHT abaixo do nivel de 12.24 hPa, e o "topo real" dos
+! dados (maior altura entre os niveis) continuava sendo o de 12.24 hPa --
+! o buffer nao aumentava a cobertura vertical nenhum pouco. Corrigido em
+! extract_fields.F90 com uma extrapolacao hipsometrica isotermica
+! especifica para GHT nesses niveis (ver comentario la), que garante
+! altura estritamente crescente conforme a pressao cai.
+!
+! N_BUFFER_TOP = quantos dos N_PLEVELS (contados a partir do indice 1,
+! menor pressao) sao esse buffer artificial -- usado por
+! extract_fields.F90 para saber quais indices recalcular.
+!
 ! IMPORTANTE sobre a ordem: a rotina interp_tofixed_pressure (extraida de
 ! mpas_isobaric_diagnostics.F) espera press_in/press_out em ordem CRESCENTE
 ! de pressao (indice 1 = menor pressao / topo). O array nativo do MPAS
@@ -55,6 +76,7 @@ module pressure_levels
    private
 
    integer, parameter, public :: N_PLEVELS = 61
+   integer, parameter, public :: N_BUFFER_TOP = 6
 
    real(kind=RKIND), parameter, public :: plevels_hPa(N_PLEVELS) = (/ &
          1.00_RKIND,   2.00_RKIND,   3.00_RKIND,   5.00_RKIND,   7.00_RKIND, &
