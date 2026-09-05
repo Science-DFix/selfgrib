@@ -141,14 +141,6 @@ sed -i "s/^\([[:space:]]*config_block_decomp_file_prefix[[:space:]]*=\).*/\1 '${
 # Unica opcao de namelist que ativa a simulacao regional -- OBRIGATORIA
 # (ver cabecalho): sem isso o modelo trava assim que ve bdyMaskCell>0.
 sed -i -E "s|config_apply_lbcs\s*=\s*\S+|config_apply_lbcs = true|"                             namelist.atmosphere
-# config_jedi_da=true (template de producao, usado com o pipeline real de
-# assimilacao MPAS-JEDI) causava SIGSEGV aqui -- confirmado ao vivo: o
-# stream "da_state" (pacote jedi_da) tentava ler mpasout.*.nc logo no
-# primeiro timestep (mesmo sem esse arquivo ter sido fornecido por nos),
-# com comportamento inconsistente entre a fase de leitura de dimensoes
-# ("unable to open") e o timestep seguinte ("Read 'da_state' input stream
-# valid at ..."). Desativado aqui: nao estamos fazendo assimilacao,
-# so um forecast simples a partir do init.nc + LBC.
 sed -i -E "s|config_jedi_da\s*=\s*\S+|config_jedi_da = false|"                                  namelist.atmosphere
 
 # --- streams.atmosphere ---
@@ -161,6 +153,16 @@ sed -i "/stream name=\"diagnostics\"/,/<\/stream>/ s|output_interval=\"[^\"]*\"|
 # comentario no cabecalho: nosso init.nc ja tem todos os campos que ele
 # forneceria, e nao geramos/linkamos um invariant.nc para esta malha.
 sed -i '/<immutable_stream name="invariant"/,/\/>/d' streams.atmosphere
+# remove tambem o stream "da_state" (pacote jedi_da) -- confirmado ao
+# vivo que desativar config_jedi_da=false (namelist) NAO desativa esse
+# stream (o framework continua tentando le-lo/escreve-lo): o log mostrava
+# "Read 'da_state' input stream valid at 0000-01-01_00:00:00" (data
+# zerada/invalida, tempo de leitura ~0s -- sinal de dado nao inicializado)
+# imediatamente seguido de SIGSEGV na inicializacao da fisica. Removida a
+# declaracao do stream de vez (nao so desativando via namelist) -- nao
+# estamos fazendo assimilacao MPAS-JEDI, so um forecast simples a partir
+# do init.nc + LBC.
+sed -i '/<immutable_stream name="da_state"/,/\/>/d' streams.atmosphere
 # adiciona o stream "lbc_in" (input) -- o template de producao ja tem um
 # stream "lbc_in" com pacote "limited_area" e input_interval="3:00:00"
 # fixo; sobrescrevemos o input_interval para bater com o intervalo real
