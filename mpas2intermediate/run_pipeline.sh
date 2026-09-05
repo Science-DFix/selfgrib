@@ -19,7 +19,10 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-export LD_LIBRARY_PATH="${LD_LIBRARY_PATH:-}:/home/dvar/miniconda3/lib"
+
+# Caminho do binario convert_mpas (compilado em ../convert_mpas, ver README).
+# Sobrescreva via env var CONVERT_MPAS_BIN se estiver em outro lugar.
+CONVERT_MPAS_BIN="${CONVERT_MPAS_BIN:-${SCRIPT_DIR}/../convert_mpas/convert_mpas}"
 
 SRC_DIR="$1"
 OUT_DIR="$2"
@@ -31,10 +34,12 @@ ENDLON="$7"
 NLAT="${8:-170}"
 NLON="${9:-240}"
 
+[ -x "$CONVERT_MPAS_BIN" ] || { echo "ERRO: convert_mpas não encontrado/executável em $CONVERT_MPAS_BIN (defina CONVERT_MPAS_BIN)"; exit 1; }
+
 mkdir -p "$OUT_DIR"
 cd "$OUT_DIR"
 
-cp -f "$SCRIPT_DIR/convert_mpas" . 2>/dev/null || cp -f /home/dvar/UNGRIB_BAM/convert_mpas/convert_mpas .
+cp -f "$CONVERT_MPAS_BIN" .
 
 cat > target_domain << EOF
 nlat = $NLAT
