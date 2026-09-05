@@ -46,6 +46,79 @@ make FC=gfortran
 `nf-config --fc` por padrão, que pode apontar para um compilador que não
 existe neste ambiente.)
 
+### 1.3. Troubleshooting: `cannot find -lnetcdf` ao linkar
+
+**Sintoma:** `nf-config` funciona (`nf-config --version`, `--fflags` retornam
+normalmente), a compilação (`-c`) de todos os `.F90` passa, mas o `make`
+falha na etapa de link com algo como:
+
+```
+/usr/bin/ld: cannot find -lnetcdf: No such file or directory
+collect2: error: ld returned 1 exit status
+```
+
+**Causa:** em ambientes que instalam dependências via Spack/EasyBuild
+(comum em clusters HPC), `netcdf-c` e `netcdf-fortran` costumam ser pacotes
+**separados**, cada um com seu próprio diretório de instalação. O
+`nf-config --flibs` (usado pelo `Makefile` deste projeto e do
+`convert_mpas`) só garante o `-L` do diretório do `netcdf-fortran` — a flag
+`-lnetcdf` (a lib C, da qual o `netcdf-fortran` depende) fica sem um `-L`
+correspondente, porque `nf-config` não sabe onde o `netcdf-c` foi instalado.
+
+**Diagnóstico (genérico, qualquer Unix):**
+
+```bash
+# 1) confirmar que é exatamente essa a falta: -lnetcdf sem -L correspondente
+nf-config --flibs
+
+# 2) achar onde a libnetcdf.* realmente está instalada no sistema
+#    (a) se houver nc-config (do pacote netcdf-c) no PATH, é o caminho mais direto:
+nc-config --libdir 2>/dev/null
+
+#    (b) via modules (Environment Modules/Lmod), se o cluster usar module load:
+module show netcdf-c 2>&1 | grep -i -E "lib|LD_LIBRARY_PATH"
+
+#    (c) busca direta no filesystem (ajuste </raiz/de/busca> para algo
+#        razoável, ex.: /opt, /usr, /lustre/.../opt — evite buscar a partir
+#        de "/" em sistemas grandes):
+find </raiz/de/busca> -name "libnetcdf.so*" -o -name "libnetcdf.a" 2>/dev/null
+```
+
+**Correção:** depois de achar o diretório (`<dir_libnetcdf-c>`, o que contém
+o `libnetcdf.so*`/`libnetcdf.a`), exportar `LIBRARY_PATH` antes de compilar
+— é a variável que o `gcc`/`gfortran` usa para procurar `-L` adicionais na
+hora de linkar, sem precisar editar o `Makefile`:
+
+```bash
+export LIBRARY_PATH=<dir_libnetcdf-c>:$LIBRARY_PATH
+make clean
+make
+```
+
+**Depois de compilar, confirme que o binário também *roda*:** o link em
+tempo de compilação usa `LIBRARY_PATH`, mas em tempo de execução o loader
+(`ld.so`) resolve as bibliotecas dinâmicas via `LD_LIBRARY_PATH` (ou cache
+do `ldconfig`) — são mecanismos independentes, então um `make` bem-sucedido
+não garante que o executável vai achar a lib ao rodar:
+
+```bash
+ldd extract_fields | grep -i netcdf
+```
+
+Se aparecer `=> not found`, adicione o mesmo diretório (ou o diretório onde
+está a `.so` de runtime, que pode ser diferente do usado para linkar, desde
+que o `soname` — ex. `libnetcdf.so.19` — seja compatível) também ao
+`LD_LIBRARY_PATH`:
+
+```bash
+export LD_LIBRARY_PATH=<dir_libnetcdf-c>:$LD_LIBRARY_PATH
+```
+
+Em ambientes com `module load`, isso normalmente já é resolvido
+automaticamente pelo próprio módulo do `netcdf-c` (que costuma exportar
+`LD_LIBRARY_PATH`, mesmo sem exportar `LIBRARY_PATH` — por isso o problema
+só aparece no link, não na execução).
+
 ---
 
 ## 2. Como rodar
