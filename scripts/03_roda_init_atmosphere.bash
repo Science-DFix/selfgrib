@@ -19,6 +19,14 @@
 #     superfície 200100 Pa — NÃO conta o pseudo-nível 201300/PMSL, que é
 #     um campo 2D isolado. Ver comentário mais abaixo, junto de
 #     N_FGLEVELS, para o detalhe completo)
+#   - config_blend_bdy_terrain: false -> true. O template de produção usa
+#     'false' porque a malha GLOBAL (x1.163842) não tem bdyMaskCell/zona
+#     de fronteira, então a flag não faz diferença lá. Para uma malha
+#     REGIONAL (bdyMaskCell > 0 nas células de contorno) o próprio manual
+#     do MPAS-A (tutorial "Regional MPAS", NCAR, slide 17) recomenda
+#     'true': mistura a altura de terreno das células de fronteira com o
+#     terreno do first-guess, para consistência entre a malha regional e
+#     os dados de contorno que serão usados no LBC (04_gera_lbc.bash).
 #   - config_block_decomp_file_prefix e filename_template dos streams:
 #     x1.<malha global> -> <REGION_NAME> (malha recortada)
 #
@@ -126,6 +134,7 @@ sed -i "s/^\([[:space:]]*config_stop_time[[:space:]]*=\).*/\1  '${START_TIME}',/
 sed -i "s/^\([[:space:]]*config_met_prefix[[:space:]]*=\).*/\1   '${PREFIXO}',/"                   namelist.init_atmosphere
 sed -i "s/^\([[:space:]]*config_nfglevels[[:space:]]*=\).*/\1     ${N_FGLEVELS},/"                  namelist.init_atmosphere
 sed -i "s/^\([[:space:]]*config_block_decomp_file_prefix[[:space:]]*=\).*/\1 '${REGION_NAME}.graph.info.part.',/" namelist.init_atmosphere
+sed -i "s/^\([[:space:]]*config_blend_bdy_terrain[[:space:]]*=\).*/\1 true,/"                        namelist.init_atmosphere
 
 # --- streams.init_atmosphere ---
 cp -f "${FILE_BASE_INI}/streams.init_atmosphere" .
