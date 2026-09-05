@@ -30,14 +30,41 @@ DIR_OUT="${DIR_OUT:-/lustre/projetos/satdas/diego_workdir/SOURCE/ungrib_to_mpas/
 PREFIXO="${PREFIXO:-MPAS}"
 
 # --- Grade lat-lon de remapeamento horizontal (convert_mpas), com margem
-#     além da região realmente usada pela malha SouthAmerica recortada
-#     (elipse: ~25.5N a ~-57.3S, ~-88W a ~-32W — ver South_America.ellipse.pts).
-STARTLAT="${STARTLAT:--60.0}"
-ENDLAT="${ENDLAT:-25.0}"
-STARTLON="${STARTLON:--90.0}"
-ENDLON="${ENDLON:--30.0}"
-NLAT="${NLAT:-170}"
-NLON="${NLON:-240}"
+#     além da região realmente usada pela malha SouthAmerica recortada.
+#
+# BUG REAL (2026-09-05): os limites antigos (lat -60/25, lon -90/-30) foram
+# calculados a partir da elipse NOMINAL do recorte (South_America.ellipse.pts,
+# comentario "~25.5N a ~-57.3S, ~-88W a ~-32W"), mas essa elipse NAO e a
+# extensao real da malha gerada pelo MPAS-Limited-Area -- o recorte inclui
+# tambem uma zona de contorno/relaxamento (specified/relaxation) ao redor
+# da elipse, que se estende BEM mais longe. Medido direto de latCell/lonCell
+# em SouthAmerica.static.nc: a malha real vai de -60.99 a +31.14 de
+# latitude e de -92.79 a -27.21 de longitude -- ate 6 graus além do que a
+# grade lat-lon antiga cobria em alguns lados. Resultado: 518 das 17064
+# celulas (medido) ficavam fora da grade lat-lon usada pelo convert_mpas,
+# sem nenhum dado real (fillval), corrompendo o GHT horizontalmente
+# interpolado so para essas celulas. Isso causava
+# "ERROR: extrap_type == 2 not implemented for target_z >= zf(1,nz)" no
+# init_atmosphere_model mesmo depois de corrigir toda a extrapolacao
+# vertical de GHT em extract_fields.F90 (confirmado lendo o
+# mpas_init_atm_vinterp.F real: target_z >= zf(1,nz) so pode disparar se
+# zf(1,nz) -- a maior altura entre os dados de first-guess da celula --
+# estiver anormalmente baixa/invalida, o que bate com dado ausente na
+# borda da grade lat-lon, nao com falta de margem vertical).
+#
+# Corrigido usando a extensao REAL medida (nao a elipse nominal) + ~3
+# graus de margem em cada lado; NLAT/NLON ajustados para manter a mesma
+# resolucao aproximada da grade antiga (~0.5 grau/ponto em lat, ~0.25 em
+# lon). Se a malha ou o recorte mudar, reconferir com:
+#   python3 -c "import netCDF4 as nc; import numpy as np; \
+#     ds=nc.Dataset('<static.nc>'); \
+#     print((ds['latCell'][:]*180/np.pi).min(), (ds['latCell'][:]*180/np.pi).max())"
+STARTLAT="${STARTLAT:--64.0}"
+ENDLAT="${ENDLAT:-34.0}"
+STARTLON="${STARTLON:--96.0}"
+ENDLON="${ENDLON:--24.0}"
+NLAT="${NLAT:-200}"
+NLON="${NLON:-288}"
 
 # --- Validações ---
 [ -d "$DIR_RODADA_GLOBAL" ]     || { echo "ERRO: DIR_RODADA_GLOBAL não encontrado: $DIR_RODADA_GLOBAL"; exit 1; }

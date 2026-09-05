@@ -57,10 +57,37 @@
 ! indices 1-6, nao o 7. Isso produzia GHT(12.24hPa) MENOR que
 ! GHT(14.06hPa) (interpolacao real, correta), quebrando monotonicidade.
 !
-! CORRECAO DEFINITIVA: em extract_fields.F90, a correcao de GHT agora e
-! feita POR CELULA, comparando cada plevels_hPa(k) contra o topo nativo
-! REAL dessa celula (pressure(nVertLevels,iCell), sempre dado real) --
-! nao mais um indice fixo do array. Nao depende mais de N_BUFFER_TOP.
+! CORRECAO (parcial): em extract_fields.F90, a correcao de GHT passou a
+! ser feita POR CELULA, comparando cada plevels_hPa(k) contra o topo
+! nativo REAL dessa celula (pressure(nVertLevels,iCell), sempre dado
+! real) -- nao mais um indice fixo do array.
+!
+! BUG 4 REAL (2026-09-05, mesmo dia, ainda -- rodando o pipeline
+! completo, nao so extract_fields isolado): a correcao "por celula"
+! tambem nao bastou -- confirmado ao vivo, mesmo com zero inversoes na
+! malha NATIVA global (validado numericamente), o init_atmosphere_model
+! continuou travando, agora consistentemente em k=1 em celulas
+! diferentes da malha REGIONAL. Causa: comparar contra o topo real DE
+! CADA CELULA faz com que celulas vizinhas NA MALHA GLOBAL tratem o
+! MESMO nivel de pressao de formas diferentes (uma extrapola, a vizinha
+! usa dado real) sempre que o topo real de uma esta abaixo e da outra
+! acima daquele nivel -- uma "troca de regime" espacial. O convert_mpas
+! (proximo estagio do pipeline, remapeamento horizontal malha nativa ->
+! grade lat-lon) mistura os dados dessas celulas vizinhas; misturar um
+! valor extrapolado (formula isotermica) com um valor real (fisica de
+! verdade) de celulas adjacentes pode gerar um perfil nao-monotonico no
+! ponto de grade remapeado, mesmo cada celula nativa sendo isoladamente
+! monotonica.
+!
+! CORRECAO DEFINITIVA: usar um CONJUNTO FIXO de indices (N_ALWAYS_EXTRAP,
+! os mesmos para TODAS as celulas) sempre corrigidos com a extrapolacao
+! hipsometrica, eliminando a troca de regime espacial -- toda celula
+! trata os mesmos primeiros N_ALWAYS_EXTRAP niveis da mesma forma
+! (extrapolacao, variando suavemente so pela ancora p_topo_real/
+! z_topo_real/T_topo_real de cada celula, que sao continuas no espaco).
+! Confirmado numa malha global real (163842 celulas): a pressao do topo
+! nativo NUNCA excede 13.86 hPa -- ver N_ALWAYS_EXTRAP abaixo para a
+! margem escolhida.
 !
 ! IMPORTANTE sobre a ordem: a rotina interp_tofixed_pressure (extraida de
 ! mpas_isobaric_diagnostics.F) espera press_in/press_out em ordem CRESCENTE
@@ -84,6 +111,17 @@ module pressure_levels
    private
 
    integer, parameter, public :: N_PLEVELS = 61
+
+   ! Quantos dos N_PLEVELS primeiros indices (menor pressao) sao SEMPRE
+   ! corrigidos com extrapolacao hipsometrica em extract_fields.F90,
+   ! para TODAS as celulas igualmente -- ver "BUG 4" no comentario acima.
+   ! 8 cobre ate 14.06 hPa; confirmado numa malha global real (163842
+   ! celulas) que a pressao do topo nativo NUNCA excede 13.86 hPa (min
+   ! 8.44, max 13.86, mediana 12.17) -- 14.06 hPa fica sempre ~0.2 hPa
+   ! acima do pior caso observado, e os indices 9+ (16.19 hPa em diante)
+   ! ficam com folga bem maior. Ajuste para cima se um novo recorte de
+   ! malha ou uma rodada diferente mostrar topo nativo mais alto que isso.
+   integer, parameter, public :: N_ALWAYS_EXTRAP = 8
 
    real(kind=RKIND), parameter, public :: plevels_hPa(N_PLEVELS) = (/ &
          1.00_RKIND,   2.00_RKIND,   3.00_RKIND,   5.00_RKIND,   7.00_RKIND, &

@@ -25,7 +25,7 @@
 program extract_fields
 
    use mpas_kind_types,  only : RKIND
-   use pressure_levels,  only : N_PLEVELS, plevels_hPa, LEVEL_SFC_PA, LEVEL_SEALVL_PA
+   use pressure_levels,  only : N_PLEVELS, N_ALWAYS_EXTRAP, plevels_hPa, LEVEL_SFC_PA, LEVEL_SEALVL_PA
    use interp_vertical,  only : interp_tofixed_pressure, compute_slp
    use netcdf
 
@@ -203,9 +203,10 @@ program extract_fields
    call interp_from_native(relhum,      rh_plev,       'RH')
 
    !-------------------------------------------------------------------
-   ! Correcao fisica de GHT acima do topo nativo REAL de CADA CELULA
-   ! (substitui a tentativa anterior baseada em N_BUFFER_TOP fixo -- ver
-   ! "BUG 3" em pressure_levels.F90 para o porque essa era insuficiente).
+   ! Correcao fisica de GHT nos N_ALWAYS_EXTRAP primeiros niveis de
+   ! plevels_hPa -- MESMO CONJUNTO DE INDICES PARA TODAS AS CELULAS (ver
+   ! "BUG 4" em pressure_levels.F90 para o porque a versao anterior,
+   ! condicional por celula, nao bastava).
    !
    ! interp_tofixed_pressure extrapola TODOS os campos acima do topo
    ! nativo com a mesma formula (field_out = field_in(topo) *
@@ -214,38 +215,37 @@ program extract_fields
    ! pressao_alvo < pressao_topo nesses niveis, ela reduz a altura em vez
    ! de aumentar.
    !
-   ! BUG 3 (2026-09-05, mesmo dia): corrigir so os N_BUFFER_TOP=6
-   ! primeiros indices (1-10 hPa) nao bastava, porque 12.24 hPa e a
-   ! MEDIANA da pressao do nivel nativo mais alto entre celulas -- para
-   ! ~metade das celulas, a pressao REAL do topo nativo desta celula
-   ! especifica e MAIOR que 12.24 hPa (ex.: 13.10 hPa numa celula real
-   ! testada), entao o proprio nivel "nativo" de 12.24 hPa TAMBEM cai no
-   ! ramo de extrapolacao com a formula errada -- so que essa celula nao
-   ! estava coberta pela correcao anterior (so cobria indices 1..6).
-   ! Resultado: GHT(12.24hPa) saia MENOR que GHT(14.06hPa) (que e
-   ! interpolacao real, sem bug), quebrando monotonicidade -- e o
-   ! init_atmosphere_model volta a travar em
-   ! "extrap_type == 2 not implemented for target_z >= zf(1,nz)", so que
-   ! agora em indices de nivel/celula variados (k=1 numa celula, k=55
-   ! noutra) dependendo de onde a inversao cai.
+   ! Uma correcao condicional por celula (so recalcular quando
+   ! plevels_hPa(k) < topo_real_desta_celula) parecia certa isoladamente,
+   ! mas quebrava a interpolacao HORIZONTAL do proximo estagio
+   ! (convert_mpas, malha nativa -> grade lat-lon): celulas vizinhas cujo
+   ! topo real cai em lados opostos de um mesmo plevels_hPa(k) tratam
+   ! esse nivel de formas diferentes (uma extrapola, a outra usa dado
+   ! real) -- uma troca de regime espacial que, ao ser misturada pelo
+   ! remapeamento horizontal, pode gerar um perfil nao-monotonico no
+   ! ponto de grade resultante (confirmado ao vivo: o
+   ! init_atmosphere_model voltou a travar em
+   ! "extrap_type == 2 not implemented for target_z >= zf(1,nz)", mesmo
+   ! com zero inversoes verificadas na malha nativa global).
    !
-   ! Correcao definitiva: para CADA CELULA, comparar contra o topo nativo
-   ! REAL dela (pressure(nVertLevels,iCell), sempre dado real, nunca
-   ! extrapolado) em vez de um indice fixo do array de saida. Todo nivel
-   ! de saida com pressao MENOR que esse topo real -- podem ser 5, 6, 7
-   ! niveis, dependendo da celula -- e recalculado com extrapolacao
-   ! hipsometrica isotermica ancorada nesse topo nativo real:
+   ! Por isso a correcao usa um conjunto FIXO de indices (N_ALWAYS_EXTRAP),
+   ! os MESMOS para toda celula, sempre recalculados com extrapolacao
+   ! hipsometrica isotermica ancorada no topo nativo REAL de cada celula
+   ! (que varia suavemente no espaco, ao contrario de uma decisao
+   ! condicional por nivel):
    !
    !   z(k) = z_topo_real + (Rd*T_topo_real/g) * ln(p_topo_real/p(k))
    !
-   ! Como p(k) < p_topo_real nesses niveis, ln(...) > 0 e a altura
+   ! N_ALWAYS_EXTRAP foi escolhido com margem sobre o pior caso observado
+   ! numa malha global real (topo nativo nunca excede 13.86 hPa) -- ver
+   ! comentario em pressure_levels.F90. Como p(k) < p_topo_real para todo
+   ! k <= N_ALWAYS_EXTRAP (garantido pela margem), ln(...) > 0 e a altura
    ! resultante e SEMPRE maior que z_topo_real, crescendo
-   ! monotonicamente conforme a pressao cai -- para QUALQUER celula,
-   ! independente de onde o seu topo nativo real cai em relacao a
-   ! plevels_hPa. Nao precisa ser fisicamente exata (isotermica e uma
-   ! simplificacao grosseira da estratosfera real): nenhuma celula real
-   ! do dominio MPAS chega perto dessas altitudes, o unico requisito e
-   ! monotonicidade.
+   ! monotonicamente conforme a pressao cai. Nao precisa ser fisicamente
+   ! exata (isotermica e uma simplificacao grosseira da estratosfera
+   ! real): nenhuma celula real do dominio MPAS chega perto dessas
+   ! altitudes, o unico requisito e monotonicidade + consistencia
+   ! espacial entre celulas vizinhas.
    !-------------------------------------------------------------------
    block
       real(kind=RKIND), parameter :: RD_GAS = 287.05_RKIND, GRAV = 9.80665_RKIND
@@ -255,10 +255,8 @@ program extract_fields
          p_topo_real = pressure(nVertLevels,iCell) / 100.0_RKIND   ! hPa, nivel nativo mais alto DESTA celula
          z_topo_real = height_mass(nVertLevels,iCell)
          t_topo_real = temperature(nVertLevels,iCell)
-         do k2 = 1, N_PLEVELS
-            if (plevels_hPa(k2) < p_topo_real) then
-               ght_plev(iCell,k2) = z_topo_real + (RD_GAS*t_topo_real/GRAV) * log(p_topo_real/plevels_hPa(k2))
-            end if
+         do k2 = 1, N_ALWAYS_EXTRAP
+            ght_plev(iCell,k2) = z_topo_real + (RD_GAS*t_topo_real/GRAV) * log(p_topo_real/plevels_hPa(k2))
          end do
       end do
    end block

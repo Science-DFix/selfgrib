@@ -402,19 +402,63 @@ netCDF** (não assumidas), exceto onde indicado como "calculado".
   real, correta), quebrando monotonicidade exatamente no ponto que a
   correção anterior assumia como seguro.
 
-  **Correção definitiva**: a correção de `GHT` agora é feita **por
-  célula**, comparando cada `plevels_hPa(k)` contra o topo nativo *real*
-  daquela célula (`pressure(nVertLevels,iCell)`, sempre dado real, nunca
-  extrapolado) em vez de um índice fixo do array — pode ser 5, 6, 7 níveis
-  recalculados dependendo da célula. Não depende mais de nenhuma constante
-  tipo `N_BUFFER_TOP`. Validado numericamente com um `history.nc` real
-  (163842 células, malha global): **zero inversões reais de altura** em
-  toda a malha (as poucas "quedas planas" que aparecem, ~34% das células,
-  em níveis de baixa/média troposfera, são platôs exatos — diferença = 0,
-  não inversão — da extrapolação "abaixo do solo" documentada em
-  `interp_vertical.F90` para células de terreno elevado; comportamento
-  esperado, tratado do lado consumidor por `config_extrap_airtemp`, não
-  relacionado a este bug).
+  **Correção "por célula" (também insuficiente)**: fazer a correção de
+  `GHT` **por célula**, comparando cada `plevels_hPa(k)` contra o topo
+  nativo *real* daquela célula (`pressure(nVertLevels,iCell)`, sempre
+  dado real) em vez de um índice fixo, corrigiu de fato a malha nativa —
+  validado numericamente com um `history.nc` real (163842 células):
+  **zero inversões reais de altura** em toda a malha global (as "quedas
+  planas" remanescentes, ~34% das células, são platôs exatos — diferença
+  = 0 — da extrapolação "abaixo do solo" para terreno elevado, esperada
+  e tratada do lado consumidor por `config_extrap_airtemp`, não
+  relacionada a este bug).
+
+  Mesmo assim, o erro **persistiu** ao rodar o pipeline completo — porque
+  esse fix trocava de regime (real vs. extrapolado) em pontos diferentes
+  para cada célula, e o `convert_mpas` (próximo estágio, remapeamento
+  horizontal malha nativa → grade lat-lon) mistura dados de células
+  vizinhas que podem estar em regimes diferentes para o mesmo nível,
+  produzindo um perfil não-monotônico no ponto de grade remapeado.
+
+  **Correção definitiva**: usar um **conjunto fixo de índices**
+  (`N_ALWAYS_EXTRAP`, os mesmos para toda célula) sempre corrigidos com a
+  extrapolação hipsométrica, eliminando a troca de regime espacial. A
+  margem foi calibrada medindo a pressão do topo nativo em toda a malha
+  global real: nunca excede 13.86 hPa (min 8.44, mediana 12.17) — por
+  isso `N_ALWAYS_EXTRAP=8` (cobre até 14.06 hPa, ~0.2 hPa de margem sobre
+  o pior caso observado).
+
+- **A causa raiz de verdade era outra: grade lat-lon do `convert_mpas`
+  menor que a malha regional real (2026-09-05, mesmo dia)**. Depois das
+  três correções acima (todas necessárias, mas insuficientes sozinhas),
+  o erro `extrap_type == 2 not implemented for target_z >= zf(1,nz)`
+  ainda persistia, agora consistentemente em `k=1` (nível mais baixo, não
+  o topo) em poucas células específicas. Lendo o código-fonte real do
+  consumidor (`mpas_init_atm_vinterp.F`, `mpas_init_atm_cases.F`, do
+  bundle MPAS-JEDI usado para compilar o `init_atmosphere_model`):
+  `zf(1,nz)` é literalmente a *altura* do último ponto do array de
+  first-guess **depois de ordenado por altura** (`mpas_quicksort`) — ou
+  seja, o erro só pode disparar se a maior altura entre os dados daquela
+  célula estiver genuinamente baixa/inválida, não por não-monotonicidade
+  local (o quicksort já corrige isso). Isso apontou para dado *ausente*,
+  não mal-extrapolado.
+  
+  Medindo `latCell`/`lonCell` direto de `SouthAmerica.static.nc`: a malha
+  regional real (incluindo a zona de contorno/relaxamento que o
+  MPAS-Limited-Area adiciona ao redor da elipse nominal, não documentada
+  no `.pts`) vai de -60.99 a **+31.14** de latitude e de -92.79 a -27.21
+  de longitude — vários graus além da grade lat-lon configurada em
+  `scripts/02_roda_pipeline_meteorologico.bash` (lat -60/25, lon -90/-30,
+  baseada na elipse *nominal*, não na extensão real). 518 das 17064
+  células (medido) ficavam fora da grade, sem nenhum dado real do
+  `convert_mpas` — exatamente as poucas células que travavam,
+  consistentemente, entre execuções.
+
+  **Correção**: `scripts/02_roda_pipeline_meteorologico.bash` agora usa
+  os limites REAIS medidos (não a elipse nominal) + margem, com
+  `NLAT`/`NLON` ajustados para manter a resolução da grade. Qualquer novo
+  recorte de malha deve reconferir a extensão real antes de fixar esses
+  limites (comando de verificação documentado no comentário do script).
 
 ---
 
