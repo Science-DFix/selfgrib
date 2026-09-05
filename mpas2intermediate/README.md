@@ -381,28 +381,40 @@ netCDF** (não assumidas), exceto onde indicado como "calculado".
   de 12.24 hPa — o buffer não aumentava a cobertura vertical nenhum pouco,
   e o `init_atmosphere_model` continuava vendo o mesmo topo de sempre.
 
-  **Correção**: em `extract_fields.F90`, depois da chamada padrão de
-  `interp_from_native` para `GHT`, os `N_BUFFER_TOP` (6) níveis de buffer
-  são recalculados com extrapolação hipsométrica isotérmica, ancorada no
-  primeiro nível nativo real (12.24 hPa, já interpolado corretamente):
-  `z(k) = z_âncora + (Rd·T_âncora/g) · ln(p_âncora/p(k))`. Como
-  `p(k) < p_âncora`, o log é positivo e a altura cresce estritamente
-  conforme a pressão cai — não precisa ser fisicamente exata (é uma
-  atmosfera isotérmica simplificada), só precisa ser monotônica, já que
-  nenhuma célula real do domínio MPAS chega perto dessas altitudes.
-  Validado numericamente com um `history.nc` real: `GHT` passou a cair de
-  forma estritamente monotônica de ~46 km (1 hPa) até ~28 km (12.24 hPa)
-  em todas as células testadas.
+  **Primeira tentativa de correção (insuficiente)**: em `extract_fields.F90`,
+  depois da chamada padrão de `interp_from_native` para `GHT`, os 6
+  primeiros índices de `plevels_hPa` (1-10 hPa) eram recalculados com
+  extrapolação hipsométrica isotérmica, ancorada no índice 7 (12.24 hPa,
+  assumido como sempre real/interpolado): `z(k) = z_âncora + (Rd·T_âncora/g)
+  · ln(p_âncora/p(k))`.
 
-  **Achado à parte (não é a causa deste bug, mas fica registrado)**: ao
-  validar, ~49.6% das células do `history.nc` de teste têm alguma
-  inversão de altura entre pares de níveis *nativos* (não só no topo —
-  aparece também entre ~500-1000 hPa). É um comportamento pré-existente
-  de `interp_tofixed_pressure`/`height_mass` não relacionado a este bug
-  (não foi introduzido por nenhuma das duas correções acima) e não causa
-  o erro fatal de topo (que só dispara na checagem explícita de fronteira
-  do domínio) — mas pode valer investigar se aparecerem outros erros de
-  interpolação em níveis internos no futuro.
+  **Bug 3 (2026-09-05, mesmo dia, ainda): a correção acima também não
+  bastou** — confirmado ao vivo rodando interativamente no nó (não via
+  job batch), o mesmo erro voltou a ocorrer, agora em índices variados
+  (`k=1` numa célula, `k=55` noutra, dependendo da célula). Causa: 12.24 hPa
+  é a *mediana* da pressão do nível nativo mais alto **entre células** —
+  para ~metade das células, a pressão real do topo nativo *daquela célula
+  específica* é **maior** que 12.24 hPa (confirmado numa célula real do
+  `history.nc`: 13.10 hPa). Ou seja, o próprio nível "nativo" de 12.24 hPa
+  também caía no ramo de extrapolação com a fórmula errada para essa
+  célula — só que a correção anterior só cobria os índices 1-6, não o 7.
+  Resultado: `GHT(12.24hPa)` saía *menor* que `GHT(14.06hPa)` (interpolação
+  real, correta), quebrando monotonicidade exatamente no ponto que a
+  correção anterior assumia como seguro.
+
+  **Correção definitiva**: a correção de `GHT` agora é feita **por
+  célula**, comparando cada `plevels_hPa(k)` contra o topo nativo *real*
+  daquela célula (`pressure(nVertLevels,iCell)`, sempre dado real, nunca
+  extrapolado) em vez de um índice fixo do array — pode ser 5, 6, 7 níveis
+  recalculados dependendo da célula. Não depende mais de nenhuma constante
+  tipo `N_BUFFER_TOP`. Validado numericamente com um `history.nc` real
+  (163842 células, malha global): **zero inversões reais de altura** em
+  toda a malha (as poucas "quedas planas" que aparecem, ~34% das células,
+  em níveis de baixa/média troposfera, são platôs exatos — diferença = 0,
+  não inversão — da extrapolação "abaixo do solo" documentada em
+  `interp_vertical.F90` para células de terreno elevado; comportamento
+  esperado, tratado do lado consumidor por `config_extrap_airtemp`, não
+  relacionado a este bug).
 
 ---
 

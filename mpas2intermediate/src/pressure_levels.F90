@@ -42,17 +42,25 @@
 ! (pressao_alvo/pressao_topo). Essa formula e plausivel para campos como
 ! temperatura, mas e FISICAMENTE INVERTIDA para altura -- como
 ! pressao_alvo < pressao_topo nos niveis de buffer, o resultado e uma
-! altura MENOR que a do topo nativo, nao maior. Ou seja, os 6 niveis de
-! buffer recebiam GHT abaixo do nivel de 12.24 hPa, e o "topo real" dos
-! dados (maior altura entre os niveis) continuava sendo o de 12.24 hPa --
-! o buffer nao aumentava a cobertura vertical nenhum pouco. Corrigido em
-! extract_fields.F90 com uma extrapolacao hipsometrica isotermica
-! especifica para GHT nesses niveis (ver comentario la), que garante
-! altura estritamente crescente conforme a pressao cai.
+! altura MENOR que a do topo nativo, nao maior.
 !
-! N_BUFFER_TOP = quantos dos N_PLEVELS (contados a partir do indice 1,
-! menor pressao) sao esse buffer artificial -- usado por
-! extract_fields.F90 para saber quais indices recalcular.
+! BUG 3 REAL (2026-09-05, mesmo dia, ainda): a primeira tentativa de
+! correcao (fixar GHT so nos 6 primeiros indices de plevels_hPa, 1-10
+! hPa, ancorada no indice 7 = 12.24 hPa) tambem nao bastou -- confirmado
+! ao vivo, o mesmo erro voltou a ocorrer, agora em indices variados
+! (k=1 numa celula, k=55 noutra). Causa: 12.24 hPa e a MEDIANA da pressao
+! do nivel nativo mais alto ENTRE CELULAS -- para ~metade das celulas, a
+! pressao real do topo nativo DESSA celula especifica e MAIOR que 12.24
+! hPa (confirmado numa celula real: 13.10 hPa), entao o proprio "nivel
+! nativo" de 12.24 hPa TAMBEM cai no ramo de extrapolacao com a formula
+! errada para essa celula -- so que a correcao anterior so cobria os
+! indices 1-6, nao o 7. Isso produzia GHT(12.24hPa) MENOR que
+! GHT(14.06hPa) (interpolacao real, correta), quebrando monotonicidade.
+!
+! CORRECAO DEFINITIVA: em extract_fields.F90, a correcao de GHT agora e
+! feita POR CELULA, comparando cada plevels_hPa(k) contra o topo nativo
+! REAL dessa celula (pressure(nVertLevels,iCell), sempre dado real) --
+! nao mais um indice fixo do array. Nao depende mais de N_BUFFER_TOP.
 !
 ! IMPORTANTE sobre a ordem: a rotina interp_tofixed_pressure (extraida de
 ! mpas_isobaric_diagnostics.F) espera press_in/press_out em ordem CRESCENTE
@@ -76,7 +84,6 @@ module pressure_levels
    private
 
    integer, parameter, public :: N_PLEVELS = 61
-   integer, parameter, public :: N_BUFFER_TOP = 6
 
    real(kind=RKIND), parameter, public :: plevels_hPa(N_PLEVELS) = (/ &
          1.00_RKIND,   2.00_RKIND,   3.00_RKIND,   5.00_RKIND,   7.00_RKIND, &

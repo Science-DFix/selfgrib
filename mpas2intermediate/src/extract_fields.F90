@@ -25,7 +25,7 @@
 program extract_fields
 
    use mpas_kind_types,  only : RKIND
-   use pressure_levels,  only : N_PLEVELS, N_BUFFER_TOP, plevels_hPa, LEVEL_SFC_PA, LEVEL_SEALVL_PA
+   use pressure_levels,  only : N_PLEVELS, plevels_hPa, LEVEL_SFC_PA, LEVEL_SEALVL_PA
    use interp_vertical,  only : interp_tofixed_pressure, compute_slp
    use netcdf
 
@@ -203,45 +203,62 @@ program extract_fields
    call interp_from_native(relhum,      rh_plev,       'RH')
 
    !-------------------------------------------------------------------
-   ! Correcao fisica de GHT nos N_BUFFER_TOP niveis de buffer (indices
-   ! 1..N_BUFFER_TOP de plevels_hPa, ver pressure_levels.F90 "BUG 2").
+   ! Correcao fisica de GHT acima do topo nativo REAL de CADA CELULA
+   ! (substitui a tentativa anterior baseada em N_BUFFER_TOP fixo -- ver
+   ! "BUG 3" em pressure_levels.F90 para o porque essa era insuficiente).
    !
    ! interp_tofixed_pressure extrapola TODOS os campos acima do topo
    ! nativo com a mesma formula (field_out = field_in(topo) *
    ! pressao_alvo/pressao_topo), valida para campos que tendem a zero com
    ! a pressao mas FISICAMENTE INVERTIDA para altura: como
    ! pressao_alvo < pressao_topo nesses niveis, ela reduz a altura em vez
-   ! de aumentar. Sem esta correcao, os niveis de buffer ficam com GHT
-   ! ABAIXO do topo nativo (12.24 hPa) -- o buffer nao aumenta a
-   ! cobertura vertical nenhum pouco, e o init_atmosphere_model volta a
-   ! travar em "extrap_type == 2 not implemented for target_z >= zf(1,nz)"
-   ! mesmo com N_PLEVELS > 55 (confirmado ao vivo).
+   ! de aumentar.
    !
-   ! Aqui recalculamos GHT nesses niveis com extrapolacao hipsometrica
-   ! isotermica (T constante = temperatura do primeiro nivel nativo real,
-   ! indice N_BUFFER_TOP+1 = 12.24 hPa, ja calculada corretamente por
-   ! interpolacao de verdade), ancorada na altura desse mesmo nivel:
+   ! BUG 3 (2026-09-05, mesmo dia): corrigir so os N_BUFFER_TOP=6
+   ! primeiros indices (1-10 hPa) nao bastava, porque 12.24 hPa e a
+   ! MEDIANA da pressao do nivel nativo mais alto entre celulas -- para
+   ! ~metade das celulas, a pressao REAL do topo nativo desta celula
+   ! especifica e MAIOR que 12.24 hPa (ex.: 13.10 hPa numa celula real
+   ! testada), entao o proprio nivel "nativo" de 12.24 hPa TAMBEM cai no
+   ! ramo de extrapolacao com a formula errada -- so que essa celula nao
+   ! estava coberta pela correcao anterior (so cobria indices 1..6).
+   ! Resultado: GHT(12.24hPa) saia MENOR que GHT(14.06hPa) (que e
+   ! interpolacao real, sem bug), quebrando monotonicidade -- e o
+   ! init_atmosphere_model volta a travar em
+   ! "extrap_type == 2 not implemented for target_z >= zf(1,nz)", so que
+   ! agora em indices de nivel/celula variados (k=1 numa celula, k=55
+   ! noutra) dependendo de onde a inversao cai.
    !
-   !   z(k) = z_ancora + (Rd*T_ancora/g) * ln(p_ancora/p(k))
+   ! Correcao definitiva: para CADA CELULA, comparar contra o topo nativo
+   ! REAL dela (pressure(nVertLevels,iCell), sempre dado real, nunca
+   ! extrapolado) em vez de um indice fixo do array de saida. Todo nivel
+   ! de saida com pressao MENOR que esse topo real -- podem ser 5, 6, 7
+   ! niveis, dependendo da celula -- e recalculado com extrapolacao
+   ! hipsometrica isotermica ancorada nesse topo nativo real:
    !
-   ! Como p(k) < p_ancora para todo k <= N_BUFFER_TOP, ln(...) > 0 e a
-   ! altura resultante e SEMPRE maior que z_ancora, crescendo
-   ! monotonicamente conforme a pressao cai -- exatamente o que da
-   ! margem vertical real ao init_atmosphere_model. Nao precisa ser
-   ! fisicamente exata (isotermica e uma simplificacao grosseira da
-   ! estratosfera real): nenhuma celula do dominio MPAS chega perto
-   ! dessas altitudes, o unico requisito e monotonicidade.
+   !   z(k) = z_topo_real + (Rd*T_topo_real/g) * ln(p_topo_real/p(k))
+   !
+   ! Como p(k) < p_topo_real nesses niveis, ln(...) > 0 e a altura
+   ! resultante e SEMPRE maior que z_topo_real, crescendo
+   ! monotonicamente conforme a pressao cai -- para QUALQUER celula,
+   ! independente de onde o seu topo nativo real cai em relacao a
+   ! plevels_hPa. Nao precisa ser fisicamente exata (isotermica e uma
+   ! simplificacao grosseira da estratosfera real): nenhuma celula real
+   ! do dominio MPAS chega perto dessas altitudes, o unico requisito e
+   ! monotonicidade.
    !-------------------------------------------------------------------
    block
       real(kind=RKIND), parameter :: RD_GAS = 287.05_RKIND, GRAV = 9.80665_RKIND
-      real(kind=RKIND) :: z_ancora, p_ancora, t_ancora
-      integer :: iCell, kbuf
+      real(kind=RKIND) :: p_topo_real, z_topo_real, t_topo_real
+      integer :: iCell, k2
       do iCell = 1, nCells
-         z_ancora = ght_plev(iCell, N_BUFFER_TOP+1)
-         p_ancora = press_out(iCell, N_BUFFER_TOP+1)
-         t_ancora = tt_plev(iCell, N_BUFFER_TOP+1)
-         do kbuf = N_BUFFER_TOP, 1, -1
-            ght_plev(iCell,kbuf) = z_ancora + (RD_GAS*t_ancora/GRAV) * log(p_ancora/press_out(iCell,kbuf))
+         p_topo_real = pressure(nVertLevels,iCell) / 100.0_RKIND   ! hPa, nivel nativo mais alto DESTA celula
+         z_topo_real = height_mass(nVertLevels,iCell)
+         t_topo_real = temperature(nVertLevels,iCell)
+         do k2 = 1, N_PLEVELS
+            if (plevels_hPa(k2) < p_topo_real) then
+               ght_plev(iCell,k2) = z_topo_real + (RD_GAS*t_topo_real/GRAV) * log(p_topo_real/plevels_hPa(k2))
+            end if
          end do
       end do
    end block
