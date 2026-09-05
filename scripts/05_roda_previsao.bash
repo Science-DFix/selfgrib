@@ -141,6 +141,15 @@ sed -i "s/^\([[:space:]]*config_block_decomp_file_prefix[[:space:]]*=\).*/\1 '${
 # Unica opcao de namelist que ativa a simulacao regional -- OBRIGATORIA
 # (ver cabecalho): sem isso o modelo trava assim que ve bdyMaskCell>0.
 sed -i -E "s|config_apply_lbcs\s*=\s*\S+|config_apply_lbcs = true|"                             namelist.atmosphere
+# config_jedi_da=true (template de producao, usado com o pipeline real de
+# assimilacao MPAS-JEDI) causava SIGSEGV aqui -- confirmado ao vivo: o
+# stream "da_state" (pacote jedi_da) tentava ler mpasout.*.nc logo no
+# primeiro timestep (mesmo sem esse arquivo ter sido fornecido por nos),
+# com comportamento inconsistente entre a fase de leitura de dimensoes
+# ("unable to open") e o timestep seguinte ("Read 'da_state' input stream
+# valid at ..."). Desativado aqui: nao estamos fazendo assimilacao,
+# so um forecast simples a partir do init.nc + LBC.
+sed -i -E "s|config_jedi_da\s*=\s*\S+|config_jedi_da = false|"                                  namelist.atmosphere
 
 # --- streams.atmosphere ---
 cp -f "${FILE_BASE_ATM}/streams.atmosphere" .
