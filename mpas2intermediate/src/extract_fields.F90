@@ -261,6 +261,44 @@ program extract_fields
       end do
    end block
 
+   !-------------------------------------------------------------------
+   ! BUG 5 (2026-09-05, mesmo dia, ainda): platos de GHT identicos
+   ! travam o init_atmosphere_model. A extrapolacao "abaixo do solo"
+   ! (persistencia constante, ver interp_vertical.F90) faz os ULTIMOS
+   ! niveis de pressao (mais proximos da superficie) ficarem com a
+   ! MESMA altura EXATA quando a pressao real de superficie da celula e
+   ! menor que 2 ou mais dos nossos niveis fixos -- ja documentado antes
+   ! como "plato esperado, sem inversao real". Confirmado ao vivo que
+   ! isso E um bug real: o consumidor (mpas_init_atm_cases.F, rotina
+   ! "Adjust surface pressure for difference in topography") extrapola
+   ! log(PSFC) usando os DOIS PRIMEIROS pontos do perfil ordenado por
+   ! altura com uma divisao (zf(2)-zf(1)) -- se esses dois pontos tem a
+   ! MESMA altura (nosso plato), a divisao é por zero, dando
+   ! Infinity/NaN em PSFC. Reproduzido numericamente com dados reais:
+   ! confirmado NaN/Infinity exatamente nesse ponto. Resultado real:
+   ! ~12% das celulas da malha regional (2089 de 17064) saiam com
+   ! surface_pressure=NaN no init.nc, causando SIGSEGV na inicializacao
+   ! da fisica do mpas_atmosphere.
+   !
+   ! Correcao: garantir monotonicidade ESTRITA de GHT (nunca dois
+   ! niveis com a mesma altura), com uma perturbacao minima (centimetros)
+   ! only onde havia empate -- sem reescrever a fisica da extrapolacao
+   ! "abaixo do solo" nem introduzir uma dependencia condicional por
+   ! celula (que teria o mesmo problema de troca de regime espacial do
+   ! BUG 4). Aplicado por ultimo, cobre qualquer plato remanescente
+   ! (topo ou fundo) de qualquer correcao anterior.
+   !-------------------------------------------------------------------
+   block
+      integer :: iCell, k2
+      do iCell = 1, nCells
+         do k2 = 2, N_PLEVELS
+            if (ght_plev(iCell,k2) >= ght_plev(iCell,k2-1)) then
+               ght_plev(iCell,k2) = ght_plev(iCell,k2-1) - 0.01_RKIND
+            end if
+         end do
+      end do
+   end block
+
    write(0,*) 'Interpolacao vertical concluida para TT, UU, VV, GHT, SPECHUMD, RH (', N_PLEVELS, ' niveis).'
 
    !-------------------------------------------------------------------

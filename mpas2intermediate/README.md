@@ -460,6 +460,36 @@ netCDF** (não assumidas), exceto onde indicado como "calculado".
   recorte de malha deve reconferir a extensão real antes de fixar esses
   limites (comando de verificação documentado no comentário do script).
 
+- **Platôs de `GHT` (persistência constante "abaixo do solo") travam o
+  `init_atmosphere_model` de outra forma (2026-09-05, mesmo dia)**: a
+  extrapolação "abaixo do nível mais baixo do dado de entrada" de
+  `interp_tofixed_pressure` (persistência constante, ver §5 acima) faz os
+  últimos níveis de pressão (mais próximos da superfície) ficarem com a
+  **mesma altura exata** quando a pressão real de superfície da célula é
+  menor que 2+ dos nossos níveis fixos — já tínhamos documentado isso como
+  "platô esperado, sem inversão real" (não é o mesmo que uma inversão).
+  Isso **também é um bug real**: reproduzido numericamente com dados
+  reais, confirmado que o consumidor (`mpas_init_atm_cases.F`, rotina
+  "Adjust surface pressure for difference in topography") extrapola
+  `log(PSFC)` usando os *dois primeiros pontos* do perfil ordenado por
+  altura com uma divisão `(zf(2)-zf(1))` — se esses dois pontos têm a
+  mesma altura (nosso platô), a divisão é por zero, dando `Infinity`/`NaN`
+  em `PSFC`. Resultado real: ~12% das células da malha regional (2089 de
+  17064) saíam com `surface_pressure=NaN` no `init.nc`, causando SIGSEGV
+  na inicialização da física do `mpas_atmosphere` (não do
+  `init_atmosphere_model` — por isso não aparecia nos logs de erro
+  anteriores, só mais adiante no pipeline).
+
+  **Correção**: garantir monotonicidade **estrita** de `GHT` (nunca dois
+  níveis com a mesma altura), com uma perturbação mínima (centímetros) só
+  onde havia empate — sem reescrever a física da extrapolação "abaixo do
+  solo" nem introduzir dependência condicional por célula (que teria o
+  mesmo problema de troca de regime espacial do bug anterior). Aplicado
+  por último, cobre qualquer platô remanescente (topo ou fundo) de
+  qualquer correção anterior. Validado numericamente com o `history.nc`
+  completo (163842 células, malha global): **zero não-monotonicidades**
+  em toda a malha (antes: ~34% das células tinham algum platô).
+
 ---
 
 ## 7. Ferramentas auxiliares
