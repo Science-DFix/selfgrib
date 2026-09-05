@@ -11,9 +11,16 @@
 # config_init_case=9 em vez de 7, e um streams.init_atmosphere diferente:
 #   - stream "input": aponta para o <REGION_NAME>.init.nc (nao mais o
 #     static.nc) -- fornece a informacao de malha vertical ja calculada.
-#   - stream "lbc" (novo, output): gera lbc.$Y-$M-$D_$h.nc a cada
+#   - stream "lbc" (novo, output): gera lbc.$Y-$M-$D_$h.$m.$s.nc a cada
 #     config_fg_interval segundos, cobrindo config_start_time ate
-#     config_stop_time.
+#     config_stop_time. O nome do arquivo (com $m e $s, mesmo sempre
+#     "00.00") precisa bater EXATAMENTE com o filename_template do stream
+#     "lbc_in" no streams.atmosphere de producao usado por
+#     05_roda_previsao.bash -- confirmado ao vivo: com "lbc.$Y-$M-$D_$h.nc"
+#     (sem $m/$s, como no slide do tutorial NCAR) o mpas_atmosphere
+#     procurava por "lbc.2026-01-01_00.00.00.nc" e nao achava (o slide do
+#     tutorial usa um streams.atmosphere customizado, diferente do
+#     template real ja instalado no cluster).
 #
 # Pré-requisitos (produzidos pelas etapas anteriores):
 #   - <REGION_NAME>.init.nc (ver scripts/03_roda_init_atmosphere.bash)
@@ -136,7 +143,7 @@ cat > streams.init_atmosphere << EOF
 
 <immutable_stream name="lbc"
                   type="output"
-                  filename_template="lbc.\$Y-\$M-\$D_\$h.nc"
+                  filename_template="lbc.\$Y-\$M-\$D_\$h.\$m.\$s.nc"
                   filename_interval="output_interval"
                   io_type="pnetcdf,cdf5"
                   packages="lbcs"
