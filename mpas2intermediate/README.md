@@ -324,6 +324,19 @@ netCDF** (não assumidas), exceto onde indicado como "calculado".
   seção 1.1).
 - **`EARTH_RADIUS`**: usava 6370.0 (legado WPS); corrigido para 6371.229
   (raio real da malha MPAS), após comparar com um arquivo de produção real.
+- **`config_nfglevels` do `init_atmosphere_model` (namelist consumidor,
+  não deste código)**: o valor certo para uma saída deste pipeline é
+  **56**, não 55 (número de níveis de pressão em `pressure_levels.F90`)
+  nem 57 (total de `LEVEL=` distintos que aparecem no arquivo, contados
+  com `tools/rd_intermediate.exe`). O pseudo-nível `201300` (`PMSL`) é
+  gravado como um campo 2D isolado — como `PSFC`/`SKINTEMP` — e não é uma
+  camada vertical interpolável; o `init_atmosphere_model` não o conta.
+  Confirmado ao vivo: com `config_nfglevels=57` o modelo lia um nível a
+  mais que o real (dado não inicializado) e travava em
+  `ERROR: extrap_type == 2 not implemented for target_z >= zf(1,nz)`
+  seguido de segfault; o próprio log, com o valor certo, mostra
+  `Found 56 levels in the first-guess data` (55 níveis de pressão fixos +
+  1 pseudo-nível de superfície `200100`).
 
 ---
 

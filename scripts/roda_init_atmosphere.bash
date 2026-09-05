@@ -13,9 +13,10 @@
 #
 # Adapta os templates de namelist/streams do init_atmosphere_model:
 #   - config_met_prefix: 'FILE' -> PREFIXO ('MPAS')
-#   - config_nfglevels: 38 (GFS) -> 57 (total de níveis distintos no arquivo
-#     intermediário do selfgrib: 55 níveis de pressão fixos +
-#     pseudo-níveis 200100/201300 Pa — confirmado com rd_intermediate.exe)
+#   - config_nfglevels: 38 (GFS) -> 56 (55 níveis de pressão fixos do
+#     selfgrib + 1 pseudo-nível de superfície 200100 Pa — NÃO conta o
+#     pseudo-nível 201300/PMSL, que é um campo 2D isolado. Ver comentário
+#     mais abaixo, junto de N_FGLEVELS, para o detalhe completo)
 #   - config_block_decomp_file_prefix e filename_template dos streams:
 #     x1.<malha global> -> <REGION_NAME> (malha recortada)
 #
@@ -46,14 +47,18 @@ DIR_EXE="${DIR_EXE:-/lustre/projetos/satdas/diego_workdir/build-mpich-single/bin
 START_TIME="${START_TIME:-2026-01-01_00:00:00}"
 NP_RUN="${NP_RUN:-32}"
 
-# --- Constante do selfgrib: total de níveis distintos no arquivo
-#     intermediário -- NÃO é só N_FGLEVELS (55, ver
-#     mpas2intermediate/src/pressure_levels.F90). config_nfglevels conta
-#     "atmospheric levels including surface and sea-level" (manual MPAS-A,
-#     apêndice A.3) -- os 55 níveis de pressão fixos MAIS os pseudo-níveis
-#     200100 Pa (superfície/2m/10m) e 201300 Pa (PMSL) = 57. Confirmado
-#     contando os LEVEL= distintos de um arquivo real com rd_intermediate.exe.
-N_FGLEVELS="${N_FGLEVELS:-57}"
+# --- Constante do selfgrib: número de niveis verticais interpolaveis no
+#     arquivo intermediario. NAO e o total de LEVEL= distintos (57, ver
+#     rd_intermediate.exe) -- o pseudo-nivel 201300 Pa (PMSL) e um campo 2D
+#     isolado (como PSFC/SKINTEMP), nao uma camada vertical, e por isso NAO
+#     conta para config_nfglevels. Testado na pratica: com 57 o
+#     init_atmosphere_model segfaultava em "extrap_type == 2 not
+#     implemented for target_z >= zf(1,nz)" (extrapolava 1 nivel a mais,
+#     com dado nao inicializado); o proprio log confirma o valor certo:
+#     "Found 56 levels in the first-guess data" = 55 niveis de pressao
+#     fixos (mpas2intermediate/src/pressure_levels.F90 :: N_PLEVELS) + 1
+#     pseudo-nivel de superficie (200100 Pa).
+N_FGLEVELS="${N_FGLEVELS:-56}"
 
 # --- Diretório de trabalho da rodada ---
 WORK_DIR="${WORK_DIR:-${DIR_MALHA}/init_run}"
