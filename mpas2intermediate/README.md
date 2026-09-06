@@ -480,15 +480,43 @@ netCDF** (não assumidas), exceto onde indicado como "calculado".
   `init_atmosphere_model` — por isso não aparecia nos logs de erro
   anteriores, só mais adiante no pipeline).
 
-  **Correção**: garantir monotonicidade **estrita** de `GHT` (nunca dois
-  níveis com a mesma altura), com uma perturbação mínima (centímetros) só
-  onde havia empate — sem reescrever a física da extrapolação "abaixo do
-  solo" nem introduzir dependência condicional por célula (que teria o
-  mesmo problema de troca de regime espacial do bug anterior). Aplicado
-  por último, cobre qualquer platô remanescente (topo ou fundo) de
-  qualquer correção anterior. Validado numericamente com o `history.nc`
-  completo (163842 células, malha global): **zero não-monotonicidades**
-  em toda a malha (antes: ~34% das células tinham algum platô).
+  **Primeira correção (piorou o problema)**: garantir monotonicidade
+  estrita de `GHT` com uma perturbação mínima (0.01m) só onde havia
+  empate. Resolveu a divisão por zero, mas trocou o bug: quebrar o empate
+  com uma diferença de *altura* minúscula entre os dois primeiros pontos,
+  mantendo a diferença de *pressão* normal entre eles, produz uma slope
+  `log(p)`-vs-altura absurdamente íngreme (ex.: -0.6/metro). Extrapolando
+  essa slope pela distância real até o terreno (dezenas a centenas de
+  metros), o resultado explode numericamente — confirmado ao vivo:
+  `log(psfc)` chegou a 113 (`psfc≈1e49`), pior que o `NaN` original. 31
+  células (região andina) continuaram com `surface_pressure` inválido.
+
+  **Como o GFS/`ungrib` real evita isso**: dados de produção (GFS) cobrem
+  níveis de pressão até 1000 hPa em todo o globo, inclusive sobre terreno
+  elevado onde 1000 hPa fica "debaixo do chão" — o NCEP já extrapola
+  esses campos abaixo do terreno com o **método hipsométrico** (lapse-rate
+  padrão), nunca persistência constante. Por isso o perfil altura-vs-pressão
+  do GFS é sempre suave/contínuo, e a rotina "Adjust surface pressure" do
+  MPAS nunca vê esse bug em produção. A fórmula "persistência constante"
+  que usamos (`interp_vertical.F90`) foi emprestada do
+  `mpas_isobaric_diagnostics.F`, pensada para campos de *saída*/diagnóstico
+  em poucos níveis padrão — não para realimentar o `init_atmosphere_model`.
+  Usá-la para `GHT` especificamente foi uso indevido dessa fórmula fora do
+  contexto para o qual foi desenhada.
+
+  **Correção definitiva**: replicar o que o GFS faz — extrapolação
+  hipsométrica (mesma fórmula já usada no topo) para os níveis "abaixo do
+  solo", ancorada na pressão/altura/temperatura *reais* do primeiro nível
+  nativo de cada célula. Diferente do topo, aqui a condição "abaixo do
+  solo" varia muito entre células (pressão de superfície vai de ~300 hPa
+  nos Andes a ~1030 hPa ao nível do mar) — um índice fixo descartaria
+  dado real demais, então a correção é condicional por célula mesmo (a
+  troca de regime espacial é um risco menor aqui: esses pontos nunca são
+  usados pelos níveis verticais reais do modelo, só pela extrapolação de
+  `PSFC`, que só precisa de uma slope fisicamente razoável). Validado
+  numericamente com o `history.nc` completo (163842 células): zero
+  não-monotonicidades **e** `GHT` sempre em faixa fisicamente plausível
+  (-373m a 48.6km, nenhum valor absurdo).
 
 ---
 

@@ -280,20 +280,60 @@ program extract_fields
    ! surface_pressure=NaN no init.nc, causando SIGSEGV na inicializacao
    ! da fisica do mpas_atmosphere.
    !
-   ! Correcao: garantir monotonicidade ESTRITA de GHT (nunca dois
-   ! niveis com a mesma altura), com uma perturbacao minima (centimetros)
-   ! only onde havia empate -- sem reescrever a fisica da extrapolacao
-   ! "abaixo do solo" nem introduzir uma dependencia condicional por
-   ! celula (que teria o mesmo problema de troca de regime espacial do
-   ! BUG 4). Aplicado por ultimo, cobre qualquer plato remanescente
-   ! (topo ou fundo) de qualquer correcao anterior.
+   ! PRIMEIRA CORRECAO (insuficiente): so garantir monotonicidade ESTRITA
+   ! com uma perturbacao minima (0.01m) onde havia empate, sem mexer na
+   ! fisica. Isso so trocou o bug: quebrar o empate com uma diferenca de
+   ! altura MINUSCULA entre os dois primeiros pontos, mas com uma
+   ! diferenca de PRESSAO normal entre eles, produz uma slope
+   ! log(p)-vs-z ABSURDAMENTE INGREME (ex.: -0.6/metro). Extrapolando
+   ! essa slope por uma distancia normal (dezenas a centenas de metros,
+   ! ate a altura real do terreno), o resultado explode numericamente
+   ! (confirmado ao vivo: log(psfc) chegou a 113, ou seja psfc~1e49) --
+   ! pior que o NaN original. Resultado real: 31 celulas (regiao andina,
+   ! terreno de baixa/media elevacao mas ainda assim fora do "plato")
+   ! continuaram com surface_pressure=NaN/Inf.
+   !
+   ! CORRECAO DE VERDADE: como o GFS/ungrib real faz isso -- dados de
+   ! producao (GFS) cobrem niveis de pressao ate 1000 hPa em todo o
+   ! globo, inclusive sobre terreno elevado onde 1000 hPa fica
+   ! "debaixo do chao"; o NCEP ja extrapola esses campos abaixo do
+   ! terreno com o METODO HIPSOMETRICO (lapse-rate padrao), NUNCA
+   ! persistencia constante -- por isso o perfil altura-vs-pressao do
+   ! GFS e sempre suave/continuo, nunca tem dois niveis com a mesma
+   ! altura, e a rotina "Adjust surface pressure" do MPAS nunca ve esse
+   ! bug em producao. A formula "persistencia constante" que usamos
+   ! (interp_vertical.F90) foi emprestada do mpas_isobaric_diagnostics.F,
+   ! pensada para campos de SAIDA/diagnostico em poucos niveis padrao --
+   ! nao para realimentar o init_atmosphere_model. Usar persistencia
+   ! constante especificamente para GHT foi uso indevido dessa formula
+   ! fora do contexto para o qual foi desenhada.
+   !
+   ! Por isso a correcao real e replicar o que o GFS faz: extrapolacao
+   ! hipsometrica (mesma formula ja usada no topo, BUG 2/3/4 acima) para
+   ! os niveis "abaixo do solo", ancorada na pressao/altura/temperatura
+   ! REAIS do primeiro nivel nativo de cada celula (k=1, sempre dado
+   ! real, nunca extrapolado). Diferente do topo (BUG 4), aqui a
+   ! condicao "abaixo do solo" varia MUITO entre celulas (pressao de
+   ! superficie vai de ~300 hPa nos Andes a ~1030 hPa ao nivel do mar) --
+   ! um indice fixo tipo N_ALWAYS_EXTRAP descartaria dado real demais.
+   ! A troca de regime espacial entre celulas vizinhas e um risco menor
+   ! aqui do que no topo: esses pontos abaixo do solo nunca sao usados
+   ! diretamente pelos niveis verticais reais do modelo (que ficam
+   ! sempre acima do terreno) -- so servem para a extrapolacao de PSFC,
+   ! que so precisa de uma slope fisicamente razoavel, nao de precisao
+   ! entre celulas vizinhas.
    !-------------------------------------------------------------------
    block
+      real(kind=RKIND), parameter :: RD_GAS = 287.05_RKIND, GRAV = 9.80665_RKIND
+      real(kind=RKIND) :: p_chao_real, z_chao_real, t_chao_real
       integer :: iCell, k2
       do iCell = 1, nCells
-         do k2 = 2, N_PLEVELS
-            if (ght_plev(iCell,k2) >= ght_plev(iCell,k2-1)) then
-               ght_plev(iCell,k2) = ght_plev(iCell,k2-1) - 0.01_RKIND
+         p_chao_real = pressure(1,iCell) / 100.0_RKIND   ! hPa, nivel nativo mais baixo (superficie) DESTA celula
+         z_chao_real = height_mass(1,iCell)
+         t_chao_real = temperature(1,iCell)
+         do k2 = 1, N_PLEVELS
+            if (plevels_hPa(k2) > p_chao_real) then
+               ght_plev(iCell,k2) = z_chao_real - (RD_GAS*t_chao_real/GRAV) * log(plevels_hPa(k2)/p_chao_real)
             end if
          end do
       end do
