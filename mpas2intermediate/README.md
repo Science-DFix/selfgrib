@@ -547,3 +547,166 @@ O(s) arquivo(s) `<PREFIXO>:AAAA-MM-DD_HH` gerados aqui são o
 `config_init_case=9` para a sequência completa → fronteira lateral, se a
 malha-alvo for regional). A malha-alvo (recorte regional ou global) é
 preparada separadamente — ver `../MPAS-Limited-Area/HOWTO_RECORTE.md`.
+
+---
+
+## 9. Pontos em aberto no MPAS-Model (upstream) — o que a comunidade já
+    sabe, e como resolvemos por conta própria
+
+Depois de fechar as correções da seção 6.1, pesquisamos se os bugs que
+encontramos (`extrap_type==2` no topo, platôs de `GHT` abaixo do solo) já
+eram conhecidos fora deste projeto — tanto no repositório oficial do
+MPAS-Model quanto no fórum de suporte WRF/MPAS-A da NCAR/UCAR. **Resposta:
+sim, os dois são bugs/limitações documentados e, até onde encontramos,
+ainda sem correção definitiva mesclada no `MPAS-Model` upstream.** Registramos
+aqui as fontes, o que cada uma diz, e por que decidimos manter nossa
+solução (feita inteiramente no nosso próprio código, sem patch no
+`MPAS-Model`) em vez de adotar qualquer coisa que essas fontes sugerem.
+
+### 9.1. GHT abaixo do solo (nosso "Bug 5") = GitHub Issue #1031 do MPAS-Model
+
+Um usuário relatou no fórum exatamente o sintoma que reproduzimos
+numericamente (altura de 850 hPa saindo ~3000 m sobre a Groenlândia, e
+também sobre os Alpes/Atlas — terreno alto):
+
+> *"I don't think that a pressure as high as 850 hPa can be measured at
+> 3000 m?"* — [850 hPa surface too high?](https://forum.mmm.ucar.edu/threads/850-hpa-surface-too-high.12461/)
+
+Resposta de **Michael Duda** (mantenedor do `core_init_atmosphere`/diagnósticos
+isobáricos no MPAS-Model):
+
+> *"My guess is that when the 850 hPa surface is below ground, the
+> interp_tofixed_pressure routine that is used to produce the
+> 'height_XXXhPa' fields at line 710 of isobaric_diagnostics.F is
+> returning the lowest model level height. [...] To keep track of this,
+> I've created GitHub Issue #1031 in the MPAS-Model repository."*
+
+Isso é a confirmação, pela própria pessoa que escreveu a rotina, do
+mecanismo exato do nosso Bug 5: `interp_tofixed_pressure` (a mesma função
+que copiamos para `src/interp_vertical.F90`, seção 4) devolve o valor do
+nível mais baixo (persistência constante) quando a pressão-alvo está
+abaixo do solo, gerando um platô. O Issue #1031 ficou registrado como
+"preciso olhar com calma" — não encontramos PR/commit fechando-o no
+histórico do `MPAS-Dev/MPAS-Model`.
+
+**Por que não adotamos nada de lá:** não há solução proposta no Issue, só
+o diagnóstico. Resolvemos por conta própria com extrapolação hipsométrica
+de verdade (§6.1, "Correção definitiva" do platô de GHT) — que é uma
+solução mais completa do que existe hoje no próprio MPAS-Model.
+
+**Limitação que persiste, fora do nosso controle:** nossa correção vale
+**só para o `GHT` que geramos na etapa de pré-processamento** (a condição
+inicial/fronteira lateral, `extract_fields.F90`). A rotina
+`interp_tofixed_pressure` original, com o bug do Issue #1031, continua
+ativa **dentro do próprio `mpas_atmosphere`** (núcleo de previsão) — é ela
+quem calcula `height_850hPa`, `temperature_850hPa`, `relhum_850hPa`,
+`uzonal_850hPa`, `umeridional_850hPa`, `dewpoint_850hPa`, `vorticity_850hPa`,
+`w_850hPa` (e os mesmos campos em 700/925 hPa) toda vez que o modelo grava
+`diag.*.nc` durante uma previsão — código-fonte de terceiros que não
+tocamos. **Se algum dia formos plotar esses campos especificamente em
+750/850/925 hPa sobre terreno alto (Andes/Altiplano), o mesmo platô do
+Issue #1031 vai aparecer ali**, porque é gerado em tempo de execução pelo
+modelo, não pela nossa pipeline. Nos gráficos que já produzimos isso não
+aconteceu porque usamos `height_500hPa` (raramente abaixo do solo) e
+campos de superfície diretos (T2m, PNM, vento 10m, CAPE, OLR, precipitação)
+que não passam por essa interpolação isobárica.
+
+Se um dia quisermos eliminar esse artefato também nos diagnósticos da
+própria previsão (não só na condição inicial), a correção teria que ser
+um patch no `mpas_isobaric_diagnostics.F` do `MPAS-Model` (aplicando a
+mesma ideia hipsométrica dentro de `interp_tofixed_pressure`) — escopo
+maior, porque essa mesma função também alimenta `mslp`, `t_isobaric` e
+`z_isobaric`. **Decisão registrada nesta sessão: não fazer esse patch por
+enquanto** — nenhum dos nossos produtos atuais depende de níveis de
+pressão baixos (700/850/925 hPa) sobre terreno elevado.
+
+### 9.2. `extrap_type == 2` no topo (nosso "Bug 2/3") — mesmo erro relatado
+     por outros usuários, sem correção oficial "de código" que resolva
+     sozinha
+
+Três threads do fórum relatam a **mesma mensagem de erro** que tivemos no
+início desta jornada (`ERROR: extrap_type == 2 not implemented for
+target_z >= zf(1,nz)`):
+
+1. **[Vertical interpolation to GFS hybrid levels](https://forum.mmm.ucar.edu/threads/vertical-interpolation-to-gfs-hybrid-levels.22838/)**
+   — o caso mais parecido com o nosso. Resposta do mgduda: sugestão de
+   hotfix trocando `>=` por `>` em `mpas_init_atm_cases.F` (permitir
+   prosseguir sem extrapolar quando as alturas são exatamente iguais), e
+   alternativa de reduzir `config_ztop` em ~0.1 m. **O usuário testou os
+   dois e o erro continuou.** A causa raiz de verdade, que ele mesmo
+   encontrou, foi outra: *"I eventually figured out that the GFS analysis
+   I was making IC's from didn't contain all of the levels. I would check
+   your ERA5 analysis' vertical level info with wgrib2."* — ou seja,
+   **dado de entrada sem cobertura vertical suficiente**, exatamente o
+   diagnóstico do nosso Bug 2 (§6.1), e exatamente a metodologia que já
+   estávamos usando (ler o `FILE:*` real de produção para descobrir o teto
+   verdadeiro do GFS, em vez de adivinhar).
+
+2. **[ERROR: extrap_type == 2 ... with GFS data for init_atmosphere](https://forum.mmm.ucar.edu/threads/error-extrap_type-2-not-implemented-for-target_z-zf-1-nz-with-gfs-data-for-init_atmosphere.27755/)**
+   — mesma mensagem, causa raiz completamente diferente: o `WPS` do
+   usuário tinha sido compilado com um compilador Fortran divergente do
+   `gfortran` usado no `MPAS-Model`, corrompendo silenciosamente o
+   binário intermediário. Resolvido recompilando o `WPS` com o compilador
+   certo. **Relevante para nós como item de checklist futuro**, caso o
+   erro volte a aparecer depois de alguma mudança de ambiente/compilador:
+   confirmar que `mpas2intermediate` e o `init_atmosphere_model` foram
+   compilados com o mesmo `gfortran` (o Makefile deste projeto já força
+   `-fconvert=big-endian -frecord-marker=4`, seção 1.1, exatamente para
+   evitar esse tipo de incompatibilidade).
+
+3. **[MPAS initialization with lapse-rate when levels go above model top](https://forum.mmm.ucar.edu/threads/mpas-initialization-with-lapse-rate-when-levels-go-above-model-top.28140/)**
+   — thread mais recente, sem resolução final registrada. Um usuário
+   (`Benr`) propôs ao próprio time do MPAS-Model duas alternativas de
+   engenharia — (a) logar um erro mais informativo e cair de volta
+   (fallback) para extrapolação `constant` automaticamente, ou (b) falhar
+   de forma mais clara/abrupta — nenhuma das duas foi implementada até
+   onde encontramos. A recomendação prática de **Ming Chen** (também
+   ligado ao desenvolvimento do MPAS) foi usar
+   `config_extrap_airtemp = 'constant'`/`'linear'` em vez de `'lapse-rate'`,
+   **ou** *"usar dados com nível superior maior que o topo do MPAS"* —
+   citando especificamente usar níveis de modelo do GFS (híbridos) em vez
+   de níveis de pressão. Essa segunda recomendação é, na prática, a mesma
+   ideia por trás do nosso Bug 2/3: **garantir que o dado de entrada tenha
+   teto vertical acima do topo real do domínio MPAS**, só que a
+   implementamos mantendo o formato de níveis de pressão (mais simples de
+   gerar a partir da malha nativa do MPAS global) e adicionando margem
+   real (1–10 hPa, calibrada pelo teto real do GFS) em vez de trocar para
+   níveis híbridos.
+
+**Por que não adotamos o hotfix `>=`→`>`:** o próprio autor do fórum (caso
+1) testou e não resolveu — o hotfix só cobre o caso de igualdade exata de
+altura, que não é o problema de fundo (falta de margem/cobertura). Como já
+tínhamos a causa raiz certa (Bug 2) e a corrigimos direto no dado de
+entrada, aplicar esse hotfix no código do `MPAS-Model` seria uma camada
+de segurança redundante, sem necessidade comprovada. Fica registrado aqui
+como opção conhecida, caso um teto de domínio (`config_ztop`) muito mais
+alto no futuro volte a expor esse limite mesmo com nossa margem atual de
+1 hPa.
+
+### 9.3. Referências adicionais da comunidade, não aplicadas diretamente
+
+- **[To obtain data for more isobaric levels in MPAS model](https://forum.mmm.ucar.edu/threads/to-obtain-data-for-more-isobaric-levels-in-mpas-model.23154/)**
+  — mostra como estender o número de níveis de pressão do stream de
+  diagnósticos da própria previsão (`Registry_isobaric.xml` +
+  `isobaric_diagnostics.F`, `nIsoLevelsT`/`t_iso_levels`). Não usamos isso
+  porque nosso pipeline (`plevels_hPa`, `src/pressure_levels.F90`) já
+  define os próprios níveis-alvo de forma independente, para a condição
+  inicial — mas é a referência certa se algum dia quisermos mais níveis
+  de saída na *previsão* (`diag.*.nc`), não na condição inicial.
+- Comparações com **FV3** (extrapolação de `pressfc` com lapse-rate padrão
+  de atmosfera dos EUA, interpolação vetorial de vento) e **WRF**
+  (`extrap_type`/`t_extrap_type` configuráveis pelo usuário) reforçam que
+  a família de solução "extrapolação física baseada em taxa de
+  lapso/hipsometria, em vez de persistência ou redução proporcional" é a
+  prática consolidada na área — o que dá suporte independente à escolha
+  que já tínhamos feito para o Bug 3/5, sem que nenhuma dessas fontes
+  tenha sido usada como base de código.
+
+### 9.4. Resumo para quem for mexer nisso depois
+
+| Bug nosso | Confirmado como bug conhecido? | Corrigido onde | Ainda em aberto? |
+|---|---|---|---|
+| GHT invertido acima do topo (Bug 3) | Sim, mesma fórmula do Issue #1031/`isobaric_diagnostics.F` | `extract_fields.F90` (nossa pipeline) | Não, para a condição inicial. Sim, para `height_XXXhPa` da própria previsão (não corrigido, é código de terceiros). |
+| Platô de GHT abaixo do solo (Bug 5) | Sim, GitHub Issue #1031 (MPAS-Dev/MPAS-Model), sem PR de correção conhecido | `extract_fields.F90` (nossa pipeline) | Idem acima. |
+| `extrap_type==2` sem margem no topo (Bug 2) | Sim, mesma mensagem de erro relatada por outros usuários no fórum, sem hotfix de código que resolva sozinho | `pressure_levels.F90` (margem real de 1–10 hPa) | Não, salvo se `config_ztop` mudar para muito acima do teto atual. |
+| Regime-switching espacial (Bug 4) | Não encontramos relato equivalente na comunidade (specific ao nosso pipeline de 2 estágios: extração + `convert_mpas`) | `extract_fields.F90` (`N_ALWAYS_EXTRAP` fixo) | Não. |
