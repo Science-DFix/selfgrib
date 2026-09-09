@@ -16,7 +16,7 @@ fórmulas, números de validação, o que ainda não foi testado).
 | 3 | `voronoi/03_interp_horizontal_nativa.bash` | Roda `hinterp_native` pra cada tempo: remapeia os campos extraídos direto pros centros de célula da malha-alvo (baricêntrico, sem grade lat-lon). | Novo. |
 | 4 | `voronoi/04_gera_init_native.bash` | Roda `gen_init_native` (Fases 2+3+4+6) pro tempo inicial + mescla com `ncks -A` os campos de cópia direta do `static.nc` → `init.nc` completo (135 variáveis). | Novo (substitui `scripts/03_roda_init_atmosphere.bash` — não chama o `init_atmosphere_model` real pra essa etapa). |
 | 5 | `voronoi/05_gera_lbc_native.bash` | Roda `gen_lbc_native` pra cada tempo de fronteira (reusa a malha vertical do `init.nc`, não recalcula) → `lbc.*.nc`. | Novo (substitui `scripts/04_gera_lbc.bash`). |
-| 6 | `scripts/05_roda_previsao.bash` | Roda a previsão de verdade (`atmosphere_model`) a partir do `init.nc`/`lbc.*.nc` gerados. | **Sim, sem alteração** — não importa como o `init.nc`/`lbc.*.nc` foram gerados, contanto que o schema esteja certo. **Ainda não testado com os arquivos desta rota** (Fase 7 do plano). |
+| 6 | `voronoi/06_roda_previsao_native.bash` | Roda a previsão de verdade (`mpas_atmosphere`) a partir do `init.nc`/`lbc.*.nc` nativos. | Cópia de `scripts/05_roda_previsao.bash` (mesmo namelist/streams/executável/tabelas de física) — só os caminhos de entrada mudam (`init_run_native`/`lbc_run_native`). |
 
 ## Variáveis de ambiente principais
 
@@ -56,13 +56,16 @@ bash scripts/voronoi/05_gera_lbc_native.bash     # todos os tempos de $TIMES
 
 ## Status (2026-09-09)
 
-Fases 1-6 validadas campo-a-campo contra dado real de produção (a maioria
-exata/quase-exata). `lbc.*.nc`: auto-consistência exata (validado contra o
-próprio `init.nc` no mesmo tempo), mas validação contra o `lbc.nc` real de
-6h depois não foi conclusiva — achado um bug real na própria referência
-(`lbc_qv` constante em todos os níveis) e um resíduo maior ainda não
-explicado em `u`/`theta`/`rho` (hipótese: produção usa análise assimilada
-JEDI como first-guess pros tempos 06/12/18h, não previsão pura — não
-confirmado). **Ainda não rodamos o passo 6** (previsão real a partir
-desses arquivos) — é o próximo teste que decide se isso está pronto pra
-valer.
+**Rodado ponta-a-ponta no Jaci de verdade (passos 1-5)** — tudo OK, rápido
+(segundos por passo, Lustre local). `init.nc`: 136/135 variáveis (135 reais
++ 1 extra inofensiva), validado campo-a-campo contra o `init.nc` real —
+bate exato/quase-exato em tudo. `lbc.*.nc`: auto-consistência exata
+(diff=0 contra o próprio `init.nc` no mesmo tempo) E validação consistente
+contra os 5 `lbc.*.nc` reais de produção — erro médio pequeno e estável
+nos 5 tempos (`u`~0.05-0.09 m/s, `theta`~0.05-0.11K, `rho`~0.006,
+`w`~0.004). Único problema real conhecido: bug confirmado na própria
+referência (`lbc_qv` constante em todos os níveis, não é nosso).
+
+**Próximo passo — passo 6 (Fase 7)**: rodar a previsão de verdade
+(`mpas_atmosphere`) a partir desses arquivos e comparar contra a rodada
+de referência já documentada no README principal. Ainda não executado.
