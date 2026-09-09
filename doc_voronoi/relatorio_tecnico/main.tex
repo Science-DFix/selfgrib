@@ -1,0 +1,195 @@
+\documentclass[12pt,a4paper]{report}
+
+% ---------------------------------------------------------------------
+% Codificação, idioma, fontes
+% ---------------------------------------------------------------------
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[brazil]{babel}
+\usepackage{lmodern}
+\usepackage{microtype}
+
+% ---------------------------------------------------------------------
+% Matemática
+% ---------------------------------------------------------------------
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{amsthm}
+\usepackage{bm}
+\usepackage{siunitx}
+\sisetup{output-decimal-marker = {,}, per-mode = symbol}
+
+% ---------------------------------------------------------------------
+% Tabelas, figuras, layout
+% ---------------------------------------------------------------------
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{array}
+\usepackage{float}
+\usepackage[margin=2.5cm]{geometry}
+\usepackage{setspace}
+\onehalfspacing
+\usepackage{enumitem}
+\usepackage{xcolor}
+
+% ---------------------------------------------------------------------
+% Diagramas
+% ---------------------------------------------------------------------
+\usepackage{tikz}
+\usetikzlibrary{shapes.geometric, arrows.meta, positioning, fit, backgrounds, calc, decorations.pathreplacing}
+
+% ---------------------------------------------------------------------
+% Código-fonte
+% ---------------------------------------------------------------------
+\usepackage{listings}
+\lstdefinelanguage{Fortran90}{
+  morekeywords={program,module,use,implicit,none,subroutine,function,end,do,end do,if,then,else,end if,call,integer,real,character,allocatable,intent,in,out,inout,dimension,type,contains,return,stop,parameter,logical,allocate,deallocate,where,elsewhere},
+  sensitive=false,
+  morecomment=[l]{!},
+  morestring=[b]",
+}
+\lstset{
+  language=Fortran90,
+  basicstyle=\ttfamily\small,
+  keywordstyle=\color{blue!70!black}\bfseries,
+  commentstyle=\color{green!40!black}\itshape,
+  stringstyle=\color{orange!70!black},
+  numbers=left,
+  numberstyle=\tiny\color{gray},
+  frame=single,
+  breaklines=true,
+  breakatwhitespace=false,
+  showstringspaces=false,
+  tabsize=2,
+  columns=flexible,
+}
+
+% ---------------------------------------------------------------------
+% Referências cruzadas e hyperlinks
+% ---------------------------------------------------------------------
+\usepackage[
+  backend=biber,
+  style=numeric,
+  sorting=nyt,
+  maxbibnames=6,
+]{biblatex}
+\addbibresource{referencias.bib}
+
+\usepackage[hidelinks,
+  colorlinks=true,
+  linkcolor=black,
+  citecolor=blue!50!black,
+  urlcolor=blue!50!black,
+]{hyperref}
+\usepackage[capitalize]{cleveref}
+
+% ---------------------------------------------------------------------
+% Cabeçalhos
+% ---------------------------------------------------------------------
+\usepackage{fancyhdr}
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[LE,RO]{\thepage}
+\fancyhead[RE]{\nouppercase{\leftmark}}
+\fancyhead[LO]{\nouppercase{\rightmark}}
+\renewcommand{\headrulewidth}{0.4pt}
+
+% ---------------------------------------------------------------------
+% Ambientes auxiliares
+% ---------------------------------------------------------------------
+\newtheorem{definicao}{Definição}[chapter]
+\newtheorem{achado}{Achado técnico}[chapter]
+\newenvironment{caixaachado}
+  {\begin{achado}\begin{quote}\itshape}
+  {\end{quote}\end{achado}}
+
+\newcommand{\selfgrib}{\textit{selfgrib}}
+\newcommand{\mpasa}{MPAS-A}
+
+% ---------------------------------------------------------------------
+% Metadados
+% ---------------------------------------------------------------------
+\title{
+  \Large\textbf{Interpolação Nativa em Malha de Voronoi para o Modelo MPAS-A:\\[0.3em]
+  Geração de Condições Inicial e de Fronteira Lateral\\Sem Reamostragem em Grade Regular}
+  \\[1em]
+  \large Relatório técnico-científico do desenvolvimento \emph{selfgrib} / rota \emph{voronoi-to-voronoi}
+}
+\author{Diego Pereira \\ \small Instituto Nacional de Pesquisas Espaciais (INPE) \\ \small \texttt{diego.pereira@inpe.br}}
+\date{Setembro de 2026}
+
+\begin{document}
+
+\begin{titlepage}
+\maketitle
+\thispagestyle{empty}
+\vfill
+\begin{abstract}
+\noindent
+Este relatório documenta o desenvolvimento de uma rota alternativa de
+geração de condições inicial (\texttt{init.nc}) e de fronteira lateral
+(\texttt{lbc.*.nc}) para o núcleo de previsão \mpasa{} (\textit{Model for
+Prediction Across Scales -- Atmosphere}) que interpola diretamente entre
+duas malhas de Voronoi esféricas -- a malha nativa de uma rodada global
+já concluída e a malha regional de destino -- sem nenhuma etapa
+intermediária de reamostragem em grade latitude-longitude regular.
+O trabalho parte do \selfgrib{}, um \textit{ungrib} alternativo já
+existente que usa a saída nativa de uma rodada global do próprio
+\mpasa{} como fonte de dado meteorológico, eliminando a dependência de
+GRIB externo (GFS, BAM, Eta). A rota descrita aqui vai um passo além:
+em vez de reescrever o formato binário intermediário do WPS e deixar o
+\texttt{init\_atmosphere\_model} original reinterpolar esse dado de volta
+para a malha nativa (usando bilinear/16-pontos sobre uma grade
+estruturada -- o único modo de interpolação que esse programa aceita),
+o pipeline aqui apresentado reimplementa, em Fortran, extraindo
+literalmente as fórmulas do código-fonte de referência do MPAS-Model
+(versão 3.0.2), cada etapa necessária -- interpolação horizontal
+baricêntrica no triângulo dual de Delaunay, geração da grade vertical
+terrain-following híbrida, interpolação vertical, balanço hidrostático,
+inicialização de campos de superfície/solo -- escrevendo os arquivos
+\texttt{init.nc}/\texttt{lbc.*.nc} diretamente, prontos para alimentar o
+núcleo dinâmico \texttt{mpas\_atmosphere} sem qualquer grade intermediária.
+A implementação foi validada campo a campo contra dados reais de
+produção (malha regional \texttt{SouthAmerica}, recorte de
+$x1.163842$, $\sim\SI{60}{\kilo\metre}$ de resolução) e, por fim, contra
+o próprio consumidor final: uma previsão de 24 horas rodada com o
+\texttt{mpas\_atmosphere} real a partir dos arquivos gerados por essa
+rota, sem erros e com campos fisicamente sãos, cuja divergência frente à
+rota de referência (via WPS) cresce de forma suave e limitada ao longo do
+tempo de integração -- o padrão esperado de duas trajetórias vizinhas de
+um sistema caótico, não de um artefato numérico.
+
+\vspace{1em}
+\noindent\textbf{Palavras-chave:} MPAS-A; malha de Voronoi; triangulação
+de Delaunay; interpolação baricêntrica; coordenada vertical
+\textit{terrain-following}; condição inicial; fronteira lateral;
+previsão numérica do tempo.
+\end{abstract}
+\vfill
+\end{titlepage}
+
+\tableofcontents
+\listoffigures
+\listoftables
+\clearpage
+
+\input{capitulos/01_introducao}
+\input{capitulos/02_fundamentacao_teorica}
+\input{capitulos/03_revisao_literatura}
+\input{capitulos/04_arquitetura_pipeline}
+\input{capitulos/05_fase1_interpolacao_horizontal}
+\input{capitulos/06_fase2_grade_vertical}
+\input{capitulos/07_fase3_interpolacao_vertical}
+\input{capitulos/08_fase4_balanco_hidrostatico}
+\input{capitulos/09_fase6_campos_superficie}
+\input{capitulos/10_fase7_execucao_validacao}
+\input{capitulos/11_implementacao_fortran}
+\input{capitulos/12_resultados}
+\input{capitulos/13_discussao_limitacoes}
+\input{capitulos/14_conclusao}
+
+\clearpage
+\printbibliography[heading=bibintoc,title={Referências}]
+
+\end{document}

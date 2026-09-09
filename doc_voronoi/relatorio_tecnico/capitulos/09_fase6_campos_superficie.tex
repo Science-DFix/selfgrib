@@ -1,0 +1,116 @@
+\chapter{Fase 6 -- Campos de superfície e solo}
+\label{cap:fase6}
+
+\section{Objetivo e achado de organização do código-fonte}
+
+A Fase~6 calcula os campos do \texttt{init.nc} que não fazem parte da
+coluna atmosférica propriamente dita -- temperatura profunda do solo,
+temperatura de pele corrigida, fração de vegetação e albedo de fundo,
+indicadores de neve e gelo marinho, umidade de solo. A categorização
+inicial do plano de trabalho assumia que a maioria desses campos seria
+uma cópia direta do dado de \textit{first-guess}, sem cálculo adicional.
+Essa suposição estava parcialmente incorreta: nenhum desses campos é, de
+fato, calculado dentro da mesma rotina que gera o restante do
+\texttt{init.nc} (\texttt{init\_atm\_case\_gfs}); eles pertencem a uma
+rotina \emph{separada} do código-fonte de referência
+(\texttt{physics\_initialize\_real}, em
+\texttt{mpas\_atmphys\_initialize\_real.F}), encontrada apenas ao buscar
+diretamente pelos nomes das variáveis de saída em todo o diretório
+\texttt{core\_init\_atmosphere} -- uma lição de que a estrutura de módulos
+do código de referência não segue necessariamente a mesma organização
+lógica das fases do problema físico.
+
+\section{Máscara terra/água e correção de temperatura de pele}
+
+A máscara \texttt{xland} é definida diretamente a partir da máscara
+estática de uso do solo (\texttt{landmask}, já presente na malha):
+$\texttt{xland}=1$ sobre terra, $\texttt{xland}=2$ sobre água. A
+temperatura de pele ($\texttt{skintemp}$) é corrigida por um termo de
+lapso térmico padrão, compensando a diferença de elevação entre a
+orografia usada pela fonte do \textit{first-guess}
+($z_{soilhgt}$, campo \texttt{SOILHGT}) e o terreno real da malha de
+destino ($z_{ter}$):
+\begin{equation}
+  T_{skin}^{corrigida}(i) = T_{skin}^{fg}(i) - 0{,}0065\,\big[z_{ter}(i) - z_{soilhgt}(i)\big].
+  \label{eq:skintemp}
+\end{equation}
+A temperatura profunda do solo ($\texttt{tmn}$) usa a mesma taxa de
+lapso, mas referenciada à temperatura climatológica anual do solo
+(\texttt{soiltemp}, campo estático) sobre terra, e à temperatura de pele
+já corrigida sobre água:
+\begin{equation}
+  T_{mn}(i) =
+  \begin{cases}
+    T_{soil}^{clim}(i) - 0{,}0065\, z_{ter}(i), & \texttt{landmask}(i)=1 \\
+    T_{skin}^{corrigida}(i), & \texttt{landmask}(i)=0
+  \end{cases}
+  \label{eq:tmn}
+\end{equation}
+
+\section{Interpolação climatológica mensal de vegetação e albedo}
+\label{sec:monthly_interp}
+
+Os campos estáticos \texttt{greenfrac} e \texttt{albedo12m}, já presentes
+no arquivo de malha estática, são climatologias de 12 valores mensais
+(um por mês do ano, representando o dia~15 de cada mês). A fração de
+vegetação instantânea (\texttt{vegfra}) e o albedo de fundo
+(\texttt{sfc\_albbck}) são obtidos por interpolação linear no tempo entre
+os dois meses cujo dia~15 está mais próximo da data de início do
+experimento, seguindo a mesma convenção do WRF/WPS. Sendo $\mathcal{D}$
+a data-alvo (dia juliano do ano) e $\mathcal{D}_1 < \mathcal{D} \le
+\mathcal{D}_2$ os dias juliano do dia~15 dos dois meses adjacentes mais
+próximos:
+\begin{equation}
+  \phi(\mathcal{D}) = \frac{\phi_{m_2}\,(\mathcal{D}-\mathcal{D}_1) + \phi_{m_1}\,(\mathcal{D}_2-\mathcal{D})}{\mathcal{D}_2 - \mathcal{D}_1}.
+  \label{eq:monthly_interp}
+\end{equation}
+Os meses de padding usados para cobrir dezembro e janeiro (dias juliano
+antes do dia~15 de janeiro ou depois do dia~15 de dezembro) usam um
+deslocamento fixo de 31 dias em relação ao dia juliano do mês adjacente
+-- não a aritmética exata de calendário do ano anterior/seguinte -- uma
+simplificação do próprio código de referência, preservada fielmente.
+O albedo de fundo resultante é normalizado por $100$ (a climatologia
+estática é armazenada em porcentagem) e forçado a $0{,}08$ sobre células
+de água.
+
+\section{Neve, gelo marinho e umidade de solo}
+
+O indicador binário de presença de neve e a profundidade de neve são
+\begin{equation}
+  \texttt{snowc}(i) =
+  \begin{cases} 1, & \texttt{snow}(i) \ge \SI{10}{\kilo\gram\per\meter\squared} \\ 0, & \text{caso contrário} \end{cases},
+  \qquad
+  \texttt{snowh}(i) = \texttt{snow}(i)\cdot\frac{5{,}0}{1000},
+  \label{eq:snow}
+\end{equation}
+com a razão $5{:}1$ entre lâmina de água equivalente e profundidade de
+neve seguindo a mesma convenção padrão do WRF/Noah.
+\begin{caixaachado}
+Durante a investigação, duas fórmulas distintas para \texttt{snowc}
+foram encontradas em pontos diferentes do código-fonte de referência --
+uma com limiar $\texttt{snow}>0$, outra com $\texttt{snow}\ge 10$. A
+ambiguidade foi resolvida por confronto direto contra o \texttt{init.nc}
+real: das 222 células com neve entre $0$ e $\SI{10}{\kilo\gram\per\meter\squared}$
+na malha de teste, nenhuma tinha $\texttt{snowc}=1$ no arquivo real,
+confirmando o limiar $\ge 10$ como o efetivamente usado em produção.
+\end{caixaachado}
+
+O gelo marinho, sob a configuração real de produção
+(\texttt{config\_frac\_seaice=.true.}, confirmada apenas após a
+generalização do código para ler o \textit{namelist} real -- ver
+\cref{sec:generalizacao}), usa um limiar fracionário mais permissivo:
+$\texttt{xice}(i) = \texttt{SEAICE}^{fg}(i)$ se $\ge 0{,}02$, senão $0$;
+e $\texttt{seaice}(i)=1$ onde $\texttt{xice}(i)>0$. A reclassificação de
+células de água muito fria (temperatura de pele abaixo de um limiar
+configurável) em gelo/terra, presente no algoritmo de referência
+completo, não foi implementada nesta rota -- discutido como limitação
+conhecida no \cref{cap:discussao}. A umidade de solo líquida
+(\texttt{sh2o}) é $0$ sobre terra e $1$ sobre água (convenção de
+saturação total sobre oceano). Os campos de temperatura/umidade das
+quatro camadas de solo do esquema Noah (\texttt{tslb}/\texttt{smois})
+são, nesta implementação, copiados diretamente do \textit{first-guess}
+em vez de reamostrados verticalmente para profundidades-alvo distintas
+-- uma simplificação deliberada, justificada e com seu risco documentado
+na \cref{cap:discussao}, válida porque tanto a origem quanto o destino
+deste \textit{first-guess} usam o mesmo esquema de solo com as mesmas
+quatro profundidades.

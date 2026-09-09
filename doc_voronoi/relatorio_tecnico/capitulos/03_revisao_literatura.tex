@@ -1,0 +1,134 @@
+\chapter{Revisão da literatura}
+\label{cap:literatura}
+
+Este capítulo situa o método adotado dentro da literatura mais ampla
+sobre geração e uso de malhas de Voronoi, organizada em três grupos
+temáticos: (i)~o núcleo dinâmico do próprio \mpasa{} e seu uso em
+assimilação de dados; (ii)~geração e otimização de malhas de Voronoi
+esféricas; e (iii)~interpolação sobre malhas de Voronoi/Delaunay fora do
+domínio da geociência atmosférica, que ajudam a generalizar e comparar o
+método baricêntrico adotado.
+
+\section{O núcleo dinâmico MPAS-A e a malha SCVT}
+
+A descrição de referência do núcleo dinâmico do \mpasa{}
+\cite{skamarock2012voronoi} estabelece a malha $C$-\textit{grid} sobre
+tesselação de Voronoi centroidal esférica como escolha estrutural do
+modelo, motivada pela ausência de singularidades polares e pela
+possibilidade de refinamento local suave -- exatamente as duas
+propriedades que tornam a malha adequada tanto para a simulação quanto,
+como demonstrado neste trabalho, para servir como origem/destino de uma
+interpolação nativa sem grade intermediária. A apresentação de Duda
+\cite{duda2014scalability} complementa essa descrição com considerações
+de desempenho/escalabilidade da implementação de produção, relevantes
+para justificar por que operações vetorizadas sobre a conectividade da
+malha (como o cálculo de pesos baricêntricos célula a célula) são
+tratáveis computacionalmente mesmo em malhas de centenas de milhares de
+células.
+
+O uso de interpolação baricêntrica na malha dual de Delaunay como método
+de remapeamento entre estados do \mpasa{} já é prática estabelecida na
+comunidade -- não uma proposta original deste trabalho, mas a aplicação
+de um método já validado a um novo contexto (geração de condição
+inicial/fronteira lateral, em vez de assimilação de dados). A referência
+central para essa confirmação é Ha et al.
+\cite{ha2017enkf}, que descreve o sistema de assimilação por
+filtro de Kalman em conjunto (MPAS-DART) do NCAR: a Eq.~6 e a Fig.~1
+daquele trabalho descrevem exatamente a interpolação baricêntrica no
+triângulo dual de Delaunay (três centros de célula vizinhos) para campos
+escalares de massa, e a Fig.~5 demonstra que a reconstrução vetorial do
+vento nos centros de célula via Funções de Base Radial (RBF),
+\emph{antes} de interpolar, produz resultado superior a tentar
+interpolar a componente normal diretamente nas arestas -- é essa
+constatação que justifica a ordem de operações adotada na
+\cref{sec:vento_arestas} deste relatório. Como contraponto, os materiais
+técnicos do sistema de assimilação MPAS-JEDI \cite{mpasjedi2021staticb}
+revelam que mesmo abordagens mais recentes de assimilação variacional
+ainda recorrem, para operações específicas sem inversa natural na malha
+não estruturada (como a transformação $\psi,\chi \to u,v$ via
+transformada espectral), a uma etapa intermediária em grade
+latitude-longitude -- evidenciando que ``100\% nativo'' nem sempre é
+possível para \emph{toda} operação de um sistema de modelagem/assimilação
+completo, mas é possível, e é o padrão estabelecido, especificamente para
+o remapeamento direto de campos entre duas malhas -- o problema atacado
+neste trabalho.
+
+\section{Geração e otimização de malhas de Voronoi esféricas}
+
+A construção computacional de tesselações de Voronoi centroidais é, por
+si, uma área de pesquisa ativa. Du e Gunzburger
+\cite{dugunzburger2002cvt} formalizam a otimização de CVTs via
+minimização de uma função energia relacionada ao algoritmo de Lloyd,
+fundamento teórico do processo de geração da própria malha do \mpasa{}.
+Yang, Gunzburger e Ju \cite{yang2017cvtsphere} propõem um método de
+geração paralela mais rápido, baseado em um algoritmo LBFGS
+pré-condicionado por Lloyd, especificamente para o caso esférico --
+relevante para a geração de malhas regionais de alta resolução, embora
+não usado diretamente na etapa de \emph{interpolação} deste trabalho (que
+opera sobre malhas já geradas por outra ferramenta,
+\texttt{MPAS-Limited-Area}). Engwirda \cite{engwirda2017jigsawgeo}
+descreve o \textsc{jigsaw-geo}, um gerador de malha não estruturada
+ortogonal localmente escalonada para modelagem de circulação geral,
+alternativa de geração de malha usada por outros modelos da mesma
+família dinâmica (por exemplo MPAS-Ocean); e Santos e Peixoto
+\cite{santospeixoto2021refinement} exploram refinamento local de malha
+esférica de Voronoi orientado por topografia em modelos de água rasa,
+tema adjacente ao problema de suavização de terreno tratado na
+\cref{cap:fase2}\footnote{Refinamento de \emph{malha} (mudar a resolução
+espacial dos geradores conforme o relevo) e suavização do \emph{campo de
+terreno} usado na definição da coordenada vertical (mantendo a malha
+fixa, o problema efetivamente tratado neste trabalho) são technicamente
+distintos, mas motivados pelo mesmo fenômeno físico -- erro de gradiente
+de pressão horizontal sobre relevo íngreme.}.
+
+\section{Interpolação sobre malhas de Voronoi/Delaunay em outros domínios}
+
+Fora da modelagem atmosférica, a interpolação sobre malhas de Voronoi tem
+tradição estabelecida em geometria computacional e em outras áreas da
+física computacional, o que permite contextualizar o método baricêntrico
+como caso particular de uma família mais ampla de interpolantes.
+Hiyoshi e Sugihara \cite{hiyoshi2000continuity} apresentam um arcabouço
+geral de interpolantes baseados no diagrama de Voronoi com continuidade
+$C^1$ (generalizando os interpolantes clássicos de Sibson e de Laplace),
+mais suaves que a interpolação baricêntrica linear por partes usada
+neste trabalho -- um candidato natural de evolução futura caso a
+descontinuidade de derivada nas arestas dos triângulos de Delaunay se
+mostre relevante em aplicações futuras (\cref{cap:discussao}). Melodia e
+Lenz \cite{melodia2019persistenthomology} propõem um critério de parada
+baseado em homologia persistente para refinar iterativamente uma
+interpolação de Voronoi, tema de otimização de malha não diretamente
+aplicável ao caso deste trabalho (malhas fixas, pré-geradas), mas
+ilustrativo da maturidade do campo. Em astrofísica e ciências da Terra,
+Petkova et al.~\cite{petkova2017densitygridding} usam grades de Voronoi
+para regularizar dados de hidrodinâmica lagrangiana (SPH), e Camps et
+al.~\cite{camps2013radiativetransfer} e Bonduà et al.
+\cite{bondua2017voronoi3d} aplicam malhas de Voronoi tridimensionais em
+transferência radiativa astrofísica e migração de gás em formações
+sedimentares, respectivamente -- ambos os casos usando a mesma
+propriedade central explorada neste trabalho (adaptabilidade local de
+resolução sem descontinuidade de malha), embora em três dimensões
+espaciais em vez da superfície esférica bidimensional do \mpasa{}.
+Abdelkader et al.~\cite{abdelkader2019vorocrust} tratam do problema
+correlato, mas distinto, de geração de malha de Voronoi conformada a uma
+superfície sem recorte (\emph{clipping}) dos poliedros de fronteira --
+não diretamente aplicável aqui, já que a malha do \mpasa{} já vem
+pré-gerada e recortada pela ferramenta \texttt{MPAS-Limited-Area}, mas
+relevante como pano de fundo sobre os desafios numéricos de se trabalhar
+com malhas de Voronoi em domínios limitados.
+
+\section{Síntese}
+
+A literatura revisada confirma dois pontos que sustentam as decisões de
+projeto deste trabalho: primeiro, que a interpolação baricêntrica na
+malha dual de Delaunay não é uma escolha \emph{ad hoc}, mas o método
+padrão já validado pela comunidade MPAS (via MPAS-DART) para
+remapeamento nativo de campos de massa entre estados dessa mesma malha;
+segundo, que existem interpolantes de maior continuidade
+(Hiyoshi--Sugihara) e técnicas mais sofisticadas de geração/refinamento
+de malha que não foram necessários para o escopo deste trabalho -- que
+lida com remapeamento entre duas malhas \emph{já geradas} -- mas que
+constituem direções concretas de trabalho futuro caso a precisão do
+método baricêntrico linear se mostre insuficiente em aplicações que
+exijam maior suavidade de derivadas (por exemplo, esquemas de advecção
+de ordem mais alta que dependam de gradientes horizontais contínuos do
+campo interpolado).

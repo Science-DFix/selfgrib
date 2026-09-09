@@ -1,0 +1,138 @@
+\chapter{Fase 7 -- Escrita dos arquivos e execução do modelo}
+\label{cap:fase7}
+
+\section{Composição do \texttt{init.nc} completo}
+
+O \texttt{init.nc} real do \mpasa{} contém 135 variáveis. Das fases
+anteriores (1 a 6), o conjunto de programas deste trabalho calcula e
+escreve diretamente 54 delas -- a grade vertical (Fase~2), os campos de
+massa e vento (Fases~3--4), e os campos de superfície/solo (Fase~6). As
+81 variáveis restantes são de \textbf{cópia direta} do arquivo de malha
+estática (\texttt{static.nc}): geometria e conectividade da malha
+(coordenadas de célula/aresta/vértice, tabelas de vizinhança), uso do
+solo, orografia bruta, e coeficientes numéricos fixos da malha (não
+dependentes do dado meteorológico nem do tempo de execução). Essa
+composição é feita por mesclagem de arquivos NetCDF
+(\texttt{ncks~-A}, utilitário do pacote NCO), não por um terceiro
+programa Fortran -- uma escolha de engenharia que evita duplicar, em
+Fortran, a leitura e reescrita de 81 campos que já existem prontos, sem
+nenhuma transformação necessária.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+    node distance=8mm and 12mm,
+    box/.style={draw, rounded corners, minimum height=0.9cm, minimum width=3.2cm, align=center, font=\footnotesize, fill=blue!6},
+    arr/.style={-{Stealth[length=2mm]}, thick},
+  ]
+  \node[box] (static) {\texttt{<REGIÃO>.static.nc}\\(81 campos estáticos)};
+  \node[box, right=of static, fill=green!10] (native) {\texttt{gen\_init\_native}\\(Fases 2+3+4+6)};
+  \node[box, below=of native, fill=orange!10] (computed) {\texttt{computed\_fields.nc}\\(54 campos calculados)};
+  \node[box, right=of computed, fill=red!8] (merge) {\texttt{ncks -A}\\(mesclagem)};
+  \node[box, right=of merge] (final) {\texttt{init.nc}\\(135 campos)};
+
+  \draw[arr] (static) -- (native);
+  \draw[arr] (native) -- (computed);
+  \draw[arr] (static.south) |- ($(merge.west)+(0,0.35)$);
+  \draw[arr] (computed) -- (merge);
+  \draw[arr] (merge) -- (final);
+\end{tikzpicture}
+\caption{Composição do \texttt{init.nc} final: os 54 campos calculados
+  pelos programas desta rota são mesclados, via \texttt{ncks -A}, com
+  os 81 campos de cópia direta do arquivo de malha estática.}
+\label{fig:composicao_init}
+\end{figure}
+
+O \texttt{lbc.*.nc} tem um esquema mais simples: apenas os sete campos
+prognósticos (\texttt{lbc\_qv}, \texttt{lbc\_qc}, \texttt{lbc\_qr},
+\texttt{lbc\_u}, \texttt{lbc\_w}, \texttt{lbc\_rho}, \texttt{lbc\_theta}),
+um arquivo por tempo de fronteira, sem geometria nenhuma -- a malha e a
+grade vertical são lidas pelo \texttt{mpas\_atmosphere} do próprio
+\texttt{init.nc}, via o \emph{stream} de entrada. O programa
+\texttt{gen\_lbc\_native} reaproveita, por isso, a grade vertical já
+calculada e gravada no \texttt{init.nc} (não a recalcula), rodando apenas
+as Fases~3--4 para cada tempo requisitado.
+
+\section{Dois bugs de formato encontrados apenas na execução real}
+\label{sec:bugs_formato}
+
+A validação numérica campo a campo contra arquivos de referência
+(\cref{cap:resultados}), por mais rigorosa que tenha sido, não é
+suficiente para garantir que um arquivo NetCDF seja de fato
+\emph{consumível} pelo programa de destino -- um ponto que se revelou
+concretamente ao tentar, pela primeira vez, alimentar o
+\texttt{mpas\_atmosphere} real com os arquivos gerados por esta rota.
+
+\begin{caixaachado}
+\textbf{Ausência da variável \texttt{xtime}.} A primeira tentativa de
+execução falhou imediatamente, antes mesmo do primeiro passo de tempo,
+com o erro \texttt{"ERROR: File SouthAmerica.init.nc does not contain
+the time 2026-01-01\_00:00:00"}. O \texttt{init.nc} gerado continha a
+variável \texttt{initial\_time} (uma string informativa, escrita
+corretamente), mas não a variável \texttt{xtime(Time, StrLen)} -- que é,
+na verdade, a que o \texttt{mpas\_atmosphere} lê para confirmar que o
+arquivo de entrada contém o tempo solicitado pelo
+\texttt{config\_start\_time}. A variável havia sido listada, na fase de
+levantamento inicial das 135 variáveis do \texttt{init.nc} real, mas não
+percebida como funcionalmente distinta de \texttt{initial\_time} até
+esse ponto -- um lembrete de que um levantamento de nomes de variável não
+substitui saber \emph{qual delas o consumidor realmente lê}.
+
+\textbf{Lixo de memória no \texttt{xtime} do \texttt{lbc.*.nc}.} Corrigido
+o problema acima, uma segunda falha ocorreu já dentro do primeiro passo
+de tempo, com um erro de execução do próprio \emph{runtime} Fortran
+(\texttt{"Fortran runtime error: Bad integer for item 1 in list input"})
+dentro da rotina de gerenciamento de tempo do framework
+(\texttt{mpas\_timekeeping.F}), derrubando simultaneamente todos os 32
+processos MPI. A causa, encontrada inspecionando os \emph{bytes} brutos
+do arquivo gerado, foi uma chamada \texttt{nf90\_put\_var} recebendo uma
+expressão de string de 24 caracteres para um campo NetCDF declarado com
+64 bytes: os 40 bytes restantes ficavam preenchidos com lixo de memória
+não inicializado (confirmado como binário arbitrário, não espaços em
+branco), que o \emph{parser} de data do \textit{framework} -- uma leitura
+formatada por posição fixa de coluna, rígida por natureza -- não
+conseguia interpretar. A correção foi declarar explicitamente uma
+variável Fortran do tipo \texttt{character(len=64)} antes de passá-la ao
+\texttt{nf90\_put\_var} (o Fortran preenche automaticamente o excedente
+com espaços em branco ao atribuir uma string mais curta a uma variável de
+tamanho fixo maior), em vez de passar a expressão concatenada
+diretamente.
+\end{caixaachado}
+
+Um terceiro problema, de natureza puramente operacional (não um bug do
+código Fortran), também surgiu apenas na execução real: o script de
+orquestração da rodada carrega um arquivo de ambiente do cluster que
+executa \texttt{conda deactivate} internamente; quando o script é
+invocado como \texttt{bash script.bash} (\emph{shell} não interativo), o
+\texttt{\textasciitilde/.bashrc} não é lido por padrão mesmo com o
+\textit{hook} do \texttt{conda} já inicializado uma vez no terminal
+interativo do usuário, e o comando falha, derrubando o script inteiro
+(\texttt{set -e}). A correção carregou defensivamente o \textit{hook} do
+\texttt{conda} (\texttt{etc/profile.d/conda.sh}) no início do script, se
+necessário, antes de delegar ao arquivo de ambiente do cluster.
+
+A lição transversal aos três problemas: nenhum deles era de física ou de
+numérica -- o \texttt{init.nc}/\texttt{lbc.*.nc} já batiam campo a campo
+com a referência antes de qualquer um deles ser encontrado -- e mesmo
+assim o modelo real recusava ou travava com os arquivos. Validação
+numérica contra referência não substitui validar contra o consumidor
+real; um arquivo pode estar fisicamente correto e ainda assim ser
+inutilizável por um detalhe de formato invisível a uma comparação
+campo a campo.
+
+\section{Execução completa}
+
+Corrigidos os três problemas, a execução do \texttt{mpas\_atmosphere}
+real, com 32 processos MPI, a partir do \texttt{init.nc}/\texttt{lbc.*.nc}
+gerados inteiramente por esta rota, completou 240 passos de tempo (24
+horas de integração, malha \texttt{SouthAmerica}, $\sim\SI{60}{\kilo\metre}$
+de resolução) em aproximadamente 106 segundos de tempo de parede, sem
+nenhuma mensagem de erro ou erro crítico (apenas 24 avisos inofensivos,
+relativos a variáveis de gelo/graupel/neve ausentes do
+\textit{first-guess} -- esperado, já que o dado de origem não modela
+esses hidrometeoros). A condição de contorno lateral foi aplicada
+corretamente nos quatro intervalos de seis horas cobertos pelos arquivos
+\texttt{lbc.*.nc}, gerando 25 arquivos de saída
+(\texttt{history.*.nc}, um por hora). Os resultados quantitativos dessa
+execução, e sua comparação com a rodada de referência gerada pela rota
+original, são apresentados no \cref{cap:resultados}.

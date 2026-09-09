@@ -1,0 +1,92 @@
+\chapter{Fase 3 -- Interpolação vertical}
+\label{cap:fase3}
+
+\section{Objetivo e achado sobre a rotina real}
+
+A Fase~3 interpola, para cada coluna vertical da malha de destino, os
+campos já remapeados horizontalmente (Fase~1, ainda organizados em
+níveis de pressão fixa) para os níveis de modelo da grade vertical
+nativa calculada na Fase~2. O plano de implementação original assumia
+que essa interpolação reaproveitaria a rotina \texttt{interp\_tofixed\_pressure}
+já usada por outro estágio do \selfgrib{} (extração dos campos
+isobáricos de diagnóstico). A leitura do código-fonte real do
+\texttt{init\_atmosphere\_model} mostrou que essa suposição estava
+incorreta: aquela rotina é usada apenas para o \emph{diagnóstico}
+isobárico de saída (\texttt{diag.*.nc}), um caminho de código
+inteiramente distinto. A interpolação que efetivamente constrói o
+estado inicial do modelo usa uma função \textbf{local} de nome
+\texttt{vertical\_interp}, definida dentro da própria rotina
+\texttt{init\_atm\_case\_gfs} -- uma interpolação linear simples
+\textbf{em altura} (não em pressão), ponto a ponto, com extrapolação
+configurável nos extremos da coluna.
+
+\section{A função de interpolação}
+
+Dado um perfil de coluna já ordenado por altura crescente,
+$\{(z_k, \phi_k)\}_{k=1}^{n}$, e uma altura-alvo $z^\star$
+(tipicamente o ponto médio de uma camada de modelo,
+$z^\star = \tfrac12[z_{grid}(k) + z_{grid}(k{+}1)]$), o valor
+interpolado é
+\begin{equation}
+  \phi(z^\star) =
+  \begin{cases}
+    \phi_1 + \left(\dfrac{\phi_2-\phi_1}{z_2-z_1}\right)(z^\star - z_1), & z^\star < z_1 \quad \text{(extrap. linear)} \\[0.8em]
+    \phi_1 - 0{,}0065\,(z^\star - z_1), & z^\star < z_1 \quad \text{(extrap. tipo lapso, s\'o T)} \\[0.8em]
+    w_-\,\phi_k + w_+\,\phi_{k+1}, \quad w_- = \dfrac{z_{k+1}-z^\star}{z_{k+1}-z_k},\ w_+ = \dfrac{z^\star - z_k}{z_{k+1}-z_k}, & z_k \le z^\star < z_{k+1} \\[0.8em]
+    \phi_n + \left(\dfrac{\phi_n-\phi_{n-1}}{z_n-z_{n-1}}\right)(z^\star - z_n), & z^\star \ge z_n
+  \end{cases}
+  \label{eq:vertical_interp}
+\end{equation}
+O modo de extrapolação abaixo do primeiro ponto é selecionável por campo:
+constante, linear, ou taxa de lapso padrão ($\SI{-0.0065}{\kelvin\per\metre}$,
+usada apenas para temperatura, seguindo \texttt{config\_extrap\_airtemp
+= 'lapse-rate'} confirmado no \textit{namelist} real de produção). O
+parâmetro \texttt{order} presente na assinatura original da função é
+recebido mas nunca de fato usado no corpo do código de referência --
+a interpolação é sempre linear, independentemente do valor passado --
+achado confirmado por leitura direta do código-fonte e preservado
+fielmente (isto é, o parâmetro não foi implementado na tradução, já que
+não tem efeito na rotina original).
+
+\section{Campos interpolados e particularidades por campo}
+
+\begin{table}[H]
+  \centering
+  \caption{Campos interpolados verticalmente na Fase~3 e seu modo de
+    extrapolação abaixo do topo do dado de origem.}
+  \label{tab:campos_fase3}
+  \begin{tabular}{@{}lll@{}}
+    \toprule
+    Campo & Extrapolação & Observação \\
+    \midrule
+    Temperatura ($T$) & taxa de lapso ($-0{,}0065\,\si{\kelvin\per\metre}$) & \texttt{config\_extrap\_airtemp} \\
+    Umidade relativa (RH) & constante & \\
+    Umidade específica & constante & valores negativos zerados antes \\
+    Altura geopotencial & linear & \\
+    Pressão & linear (em $\ln p$) & interpola $\ln p$, depois $\exp(\cdot)$ \\
+    Vento normal ($u$, aresta) & constante & perfil já projetado (\cref{eq:vento_projecao}) \\
+    Pressão de superfície & linear (em $\ln p$) & alvo $z^\star = z_{grid}(1,i)$ (nível do chão) \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+O caso da pressão merece nota: interpola-se $\ln p$, não $p$ diretamente
+-- uma escolha do próprio código de referência que garante positividade
+do resultado interpolado/extrapolado, já que $\exp(\cdot)$ de qualquer
+valor real é sempre positivo, o que não seria garantido interpolando $p$
+linearmente e podendo produzir valores negativos em extrapolação. A
+pressão de superfície ajustada por diferença de topografia usa a mesma
+fonte de dado (perfil de $\ln p$ por célula), mas avaliada no nível mais
+baixo da grade de destino em vez de em um ponto médio de camada --
+compensando, célula a célula, a diferença de elevação entre a orografia
+da malha de origem e o terreno real da malha de destino.
+
+\section{Interpolação do vento}
+
+Conforme descrito na \cref{sec:vento_arestas}, o perfil de vento é
+projetado na direção normal da aresta de destino \emph{antes} da
+interpolação vertical (\cref{eq:vento_projecao}), usando como coordenada
+de altura a média das alturas geopotenciais das duas células vizinhas da
+aresta. A \cref{eq:vertical_interp} é então aplicada a esse perfil já
+projetado, com extrapolação constante (não linear/lapso, que fariam
+menos sentido físico para uma componente de velocidade).

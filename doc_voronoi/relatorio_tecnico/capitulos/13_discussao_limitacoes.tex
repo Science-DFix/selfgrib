@@ -1,0 +1,124 @@
+\chapter{Discussão e limitações conhecidas}
+\label{cap:discussao}
+
+Este capítulo consolida, de forma explícita, as simplificações
+deliberadas e limitações conhecidas da implementação atual -- distintas
+de bugs (já corrigidos ao longo dos capítulos anteriores), no sentido de
+que são escolhas de escopo documentadas, com risco avaliado e aceito
+para o caso de estudo validado, mas que podem se tornar relevantes em
+outros contextos de uso.
+
+\section{Mistura de terreno de fronteira não implementada}
+\label{sec:blend_bdy_terrain}
+
+A limitação de maior impacto numérico mensurável identificada é a
+ausência do passo \texttt{config\_blend\_bdy\_terrain}: no algoritmo de
+referência, antes de gerar a grade vertical (\cref{cap:fase2}), a altura
+de terreno das células do anel de fronteira da malha regional
+(\texttt{bdyMaskCell}~$\ge 1$) é misturada com o terreno do dado de
+\textit{fundo} (\textit{first-guess}), suavizando a transição entre o
+domínio regional e a condição de contorno que o alimentará. Sem esse
+passo, o resíduo de $\sim\SI{171}{\metre}$ documentado na
+\cref{sec:validacao_fase2} permanece concentrado exatamente nessa faixa
+de células -- que é, por definição, onde a fronteira lateral atua. Para
+o caso de validação usado neste relatório, esse resíduo não impediu uma
+integração de 24 horas fisicamente sã (\cref{cap:resultados}), mas é a
+lacuna mais provável de precisar de atenção em usos futuros que dependam
+de maior precisão perto da borda do domínio regional, ou em domínios com
+relevo mais acentuado próximo à fronteira do que o caso testado.
+
+\section{Reamostragem vertical de solo simplificada}
+
+O algoritmo de referência reamostra os perfis de temperatura e umidade
+de solo do \textit{first-guess} para as quatro profundidades-padrão do
+esquema Noah usando uma interpolação linear por profundidade própria
+(distinta e independente da grade vertical atmosférica). Esta
+implementação copia esses campos diretamente do \textit{first-guess}
+sem essa reamostragem -- uma simplificação segura apenas porque, no caso
+de uso deste projeto, tanto a origem quanto o destino do
+\textit{first-guess} são o próprio \mpasa{}, com o mesmo esquema Noah e
+as mesmas quatro profundidades de solo. Essa simplificação deixa de ser
+válida se o \textit{first-guess} vier de uma fonte com profundidades de
+solo diferentes (por exemplo, GFS via WPS/\texttt{ungrib}).
+
+\section{Reclassificação de gelo marinho não implementada}
+
+O algoritmo de referência reclassifica células de água muito fria
+(temperatura de pele abaixo de um limiar configurável,
+\texttt{config\_tsk\_seaice\_threshold}) como gelo marinho ou terra,
+ajustando em cascata o tipo de uso do solo, textura de solo, albedo
+máximo de neve, e os perfis de temperatura/umidade de solo dessas
+células. Essa reclassificação não foi implementada. A omissão é
+irrelevante para o caso de validação (América do Sul: o campo
+\texttt{SEAICE} do \textit{first-guess} é identicamente zero em toda a
+malha, confirmado diretamente contra o dado real), mas se tornaria
+relevante em qualquer malha regional que inclua regiões de alta
+latitude com gelo marinho real.
+
+\section{Umidade específica via umidade relativa não implementada}
+
+O código de referência oferece dois caminhos para diagnosticar a razão
+de mistura de vapor d'água: a partir da umidade específica do
+\textit{first-guess} (\texttt{config\_use\_spechumd=.true.}) ou, na
+ausência desse campo, a partir da umidade relativa via a função de
+saturação de Flatau/Thompson (\texttt{rslf}). Apenas o primeiro caminho
+foi implementado -- suficiente porque todos os casos de estudo deste
+projeto, até o momento, usam \texttt{config\_use\_spechumd=.true.} com um
+\textit{first-guess} que de fato contém esse campo. O programa detecta
+explicitamente a configuração oposta e encerra com uma mensagem de erro
+clara, em vez de produzir um resultado silenciosamente incorreto.
+
+\section{Escopo de validação}
+
+Todo o processo de validação numérica e funcional apresentado neste
+relatório usa uma única malha regional (\texttt{SouthAmerica},
+$\sim\SI{60}{\kilo\metre}$), um único caso de estudo (24 horas de
+integração a partir de \texttt{2026-01-01\_00:00:00}), e
+$n_{VertLevels}=55$. A lista de 61 níveis de pressão fixa usada como
+representação intermediária entre a extração de campos e a interpolação
+horizontal nativa (\texttt{pressure\_levels.F90}, herdada sem
+modificação da rota original) é derivada de medianas estatísticas de
+altura de nível de modelo -- não específica da América do Sul, e portanto
+esperada como razoável em outras malhas -- mas nunca de fato testada em
+uma malha/resolução distinta. A generalização estrutural do código
+(\cref{sec:generalizacao}) remove a maior barreira à reprodução em outros
+casos, mas não substitui uma validação explícita nesse cenário mais
+amplo.
+
+\section{Um interpolante linear por partes: limite de suavidade}
+
+A interpolação baricêntrica adotada (\cref{sec:baricentrica}) é
+$C^0$ -- contínua entre triângulos adjacentes do dual de Delaunay, mas
+com derivada descontínua nas arestas desses triângulos. Para o problema
+resolvido aqui (gerar uma condição inicial/de fronteira, consumida
+integralmente pelo núcleo dinâmico do modelo, que já aplica sua própria
+suavização/filtro numérico durante a integração), essa limitação não se
+manifestou como problema na validação funcional (\cref{cap:resultados}).
+Ela poderia se tornar relevante caso o mesmo motor de interpolação fosse
+reaproveitado para outro uso que dependa diretamente de gradientes
+horizontais suaves do campo interpolado -- caso em que os interpolantes
+de maior continuidade discutidos na revisão de literatura
+(\cref{cap:literatura}, Hiyoshi e Sugihara~\cite{hiyoshi2000continuity})
+seriam um candidato natural de extensão.
+
+\section{Síntese das limitações}
+
+\begin{table}[H]
+\centering
+\caption{Síntese das simplificações/limitações conhecidas, seu impacto
+  no caso validado, e a condição sob a qual se tornariam relevantes.}
+\label{tab:limitacoes}
+\small
+\begin{tabular}{@{}p{4.3cm}p{3.6cm}p{5.2cm}@{}}
+\toprule
+Limitação & Impacto no caso validado & Torna-se relevante quando \\
+\midrule
+Sem mistura de terreno de fronteira & Resíduo de $\sim\SI{171}{m}$ concentrado no anel de fronteira & Precisão perto da borda regional importa; relevo acentuado na fronteira \\
+Solo copiado sem reamostragem vertical & Nenhum (mesma malha/esquema na origem e destino) & \textit{First-guess} com esquema de solo/profundidades distintas \\
+Sem reclassificação de gelo marinho & Nenhum (sem gelo marinho no caso) & Malha regional em alta latitude \\
+Sem \texttt{qv} via RH & Nenhum (\texttt{config\_use\_spechumd} sempre \texttt{.true.} nos casos testados) & \textit{First-guess} sem umidade específica direta \\
+Validação em 1 malha/1 caso & -- & Uso em outra resolução/domínio/estação do ano \\
+Interpolação $C^0$ (baricêntrica linear) & Nenhum observado & Uso que dependa de gradiente horizontal suave do campo interpolado \\
+\bottomrule
+\end{tabular}
+\end{table}

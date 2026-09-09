@@ -1,0 +1,134 @@
+\chapter{Introdução}
+\label{cap:introducao}
+
+\section{Motivação}
+
+O \mpasa{} (\textit{Model for Prediction Across Scales -- Atmosphere})
+\cite{skamarock2012voronoi} é um modelo global/regional de previsão
+numérica do tempo cujo núcleo dinâmico opera sobre uma malha horizontal
+não estruturada: uma tesselação de Voronoi centroidal esférica (SCVT),
+cujos polígonos (predominantemente hexágonos, com um pequeno número de
+pentágonos e heptágonos nos pontos de maior curvatura da geração da
+malha) definem os volumes de controle das variáveis de massa, enquanto
+as arestas entre células vizinhas carregam a componente normal do vento.
+Essa escolha de malha -- em contraste com as grades latitude-longitude
+regulares tradicionalmente usadas em modelos globais mais antigos --
+evita a convergência de meridianos nos polos e permite refinamento local
+suave sem as descontinuidades de grades aninhadas.
+
+O projeto no qual este trabalho se insere, \selfgrib{}, nasceu de uma
+pergunta simples: é possível gerar a condição inicial e a fronteira
+lateral de uma rodada regional do \mpasa{} usando, como fonte de dado
+meteorológico, a saída nativa de uma rodada global do \emph{próprio}
+\mpasa{}, sem depender de nenhum GRIB externo (GFS, BAM, Eta) e sem
+aplicar nenhum \emph{patch} no código-fonte do MPAS-Model? A resposta,
+documentada em detalhe no relatório principal do projeto, foi sim: o
+\selfgrib{} lê o \texttt{history.nc} de uma rodada global concluída,
+extrai e interpola os campos necessários, e escreve o formato binário
+intermediário do WPS -- o mesmo formato que o \texttt{ungrib} geraria a
+partir de um GRIB real -- permitindo que o \texttt{init\_atmosphere\_model}
+original consuma esse dado sem modificação alguma.
+
+Esse desenho tem uma limitação estrutural, no entanto, que motivou
+diretamente o trabalho aqui descrito. O caminho ponta a ponta da rota
+original é:
+
+\begin{center}
+malha nativa global $\to$ \textbf{grade lat-lon regular} $\to$ formato
+binário WPS $\to$ malha nativa regional
+\end{center}
+
+Duas etapas desse caminho envolvem reamostragem espacial redundante: a
+malha nativa global é primeiro remapeada para uma grade lat-lon regular
+(pelo utilitário \texttt{convert\_mpas}, da NCAR), e depois o
+\texttt{init\_atmosphere\_model} reinterpola essa grade de volta para a
+malha nativa \emph{regional} de destino, usando interpolação bilinear ou
+de 16 pontos sobre índices de grade estruturada -- o único modo de
+interpolação horizontal que esse programa aceita para o caso de dado
+real (\texttt{config\_init\_case=7/9}). O resultado é um percurso
+\emph{malha $\to$ grade $\to$ malha}: cada etapa de reamostragem introduz
+um erro de interpolação de ida e volta, mesmo quando a grade
+intermediária é fina, simplesmente pelo fato de trocar de representação
+espacial duas vezes em vez de zero. Esse problema já havia se manifestado
+concretamente no projeto como uma classe de bug real e documentada (a
+grade lat-lon nominal, dimensionada pela elipse teórica do recorte
+regional, ficava sistematicamente menor que a extensão real da malha
+recortada, deixando células sem dado válido na fronteira -- ver
+\cref{cap:discussao}).
+
+\section{Pergunta de pesquisa e escopo do trabalho}
+
+A pergunta que orienta este trabalho é direta: \emph{é possível eliminar
+inteiramente a grade lat-lon intermediária, interpolando diretamente
+entre a malha de Voronoi de origem e a malha de Voronoi de destino, e
+escrevendo os arquivos de entrada do núcleo dinâmico do \mpasa{}
+(\texttt{init.nc}/\texttt{lbc.*.nc}) diretamente -- sem passar pelo
+formato binário do WPS nem pelo \texttt{init\_atmosphere\_model}
+original?}
+
+A investigação começou pela leitura do código-fonte real do
+\texttt{init\_atmosphere\_model} (rotina
+\texttt{mpas\_init\_atm\_hinterp.F}) para verificar se essa reinterpolação
+final para a malha regional aceitaria, de alguma forma, uma lista de
+pontos dispersos em vez de uma grade estruturada. A resposta encontrada
+foi negativa: o programa é estruturalmente amarrado ao formato de grade
+(a interpolação bilinear opera sobre índices \texttt{(i,j)} de uma matriz
+regular). Isso significa que \emph{qualquer} ganho de precisão de uma
+interpolação nativa malha-a-malha só é alcançável pulando esse programa
+inteiramente para a etapa de horizontal/vertical/balanço físico --- não
+há um ``escopo mínimo'' que preserve o formato WPS e ainda elimine o
+percurso malha$\to$grade$\to$malha. Essa constatação (detalhada na
+\cref{cap:arquitetura}) definiu o escopo do trabalho: reimplementar, em
+Fortran, cada etapa fisicamente necessária para produzir um
+\texttt{init.nc}/\texttt{lbc.*.nc} válido -- não um subconjunto delas.
+
+\section{Contribuições}
+
+Este trabalho contribui com:
+
+\begin{enumerate}[label=(\roman*)]
+  \item Um motor de interpolação horizontal nativa malha-a-malha, que
+    reaproveita sem modificação o mecanismo de pesos baricêntricos do
+    utilitário \texttt{convert\_mpas} (originalmente exposto apenas para
+    remapear para grades lat-lon), operando em modo de lista de pontos
+    dispersos (\emph{scatter}) sobre os centros de célula da malha de
+    destino;
+  \item A extração e tradução literal, para um conjunto de módulos
+    Fortran independentes e testáveis, das rotinas do núcleo dinâmico do
+    MPAS-Model (versão de referência 3.0.2) responsáveis pela geração da
+    grade vertical \textit{terrain-following} híbrida, interpolação
+    vertical, balanço hidrostático não linear, e inicialização de campos
+    de superfície e solo;
+  \item Um escritor de \texttt{init.nc}/\texttt{lbc.*.nc} que produz
+    arquivos NetCDF binariamente compatíveis com o que o
+    \texttt{mpas\_atmosphere} espera, sem depender do
+    \texttt{init\_atmosphere\_model} original para gerá-los;
+  \item Uma generalização dos programas resultantes para ler os
+    parâmetros de configuração (\texttt{config\_*}) do
+    \texttt{namelist.init\_atmosphere} real do experimento em tempo de
+    execução, tornando a rota reprodutível para qualquer malha e caso de
+    estudo, não apenas para o exemplo de validação usado neste relatório;
+  \item Validação em duas camadas: (a) numérica, campo a campo, contra
+    arquivos \texttt{init.nc}/\texttt{lbc.*.nc} reais de produção; e
+    (b) funcional, executando o \texttt{mpas\_atmosphere} real a partir
+    dos arquivos gerados por essa rota e obtendo uma previsão de 24 horas
+    fisicamente sã, sem erros.
+\end{enumerate}
+
+\section{Organização do relatório}
+
+O \cref{cap:fundamentacao} apresenta a fundamentação teórica necessária
+-- a estrutura da malha SCVT do \mpasa{}, sua dualidade com a
+triangulação de Delaunay, e o princípio da interpolação baricêntrica
+usada como método de remapeamento horizontal. O \cref{cap:literatura}
+situa esse método na literatura mais ampla sobre malhas de Voronoi em
+geociências e computação científica. O \cref{cap:arquitetura} descreve a
+arquitetura geral da nova rota (o \emph{pipeline}) e a decisão de
+implementação de escopo completo. Os capítulos~\ref{cap:fase1} a
+\ref{cap:fase7} descrevem cada fase da implementação em detalhe, com as
+equações e algoritmos efetivamente usados. O \cref{cap:implementacao}
+discute as escolhas de engenharia da implementação em Fortran. O
+\cref{cap:resultados} apresenta os resultados de validação numérica e a
+execução funcional do modelo. O \cref{cap:discussao} discute limitações
+conhecidas e simplificações deliberadas. O \cref{cap:conclusao} encerra
+com as conclusões e sugestões de trabalho futuro.

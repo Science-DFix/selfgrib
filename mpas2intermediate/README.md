@@ -178,31 +178,40 @@ esta ferramenta. `history.nc` sempre tem tudo pronto porque o MPAS grava a
 malha completa e todos os campos de estado físico em todo `output` stream
 por padrão.
 
-### 2.4. Interpolação nativa Voronoi — `init.nc`/`lbc.*.nc` direto, sem WPS (experimental)
+### 2.4. Interpolação nativa Voronoi — `init.nc`/`lbc.*.nc` direto, sem WPS
 
-Em desenvolvimento (branch `feature/interpolacao-nativa-voronoi`): uma rota
-alternativa que pula o formato binário WPS e o `init_atmosphere_model`
-inteiramente para a etapa de horizontal/vertical/hidrostático, escrevendo
+Branch `feature/interpolacao-nativa-voronoi`: uma rota alternativa que
+pula o formato binário WPS e o `init_atmosphere_model` inteiramente para
+a etapa de horizontal/vertical/hidrostático, escrevendo
 `init.nc`/`lbc.*.nc` diretamente. Elimina por construção a classe de bug de
 "grade menor que a extensão real da malha" (§6.1) e o erro de round-trip
 que uma grade lat-lon intermediária introduz mesmo bem dimensionada.
 Método: interpolação baricêntrica na malha dual de Delaunay (mesma técnica
 do MPAS-DART, Ha et al. 2017 MWR) + extração literal das rotinas reais do
 MPAS-Model (fonte de produção, mpas-bundle 3.0.2) para grade
-vertical/interpolação/balanço hidrostático/campos de superfície. Plano de
-implementação completo (achados, fórmulas, números de validação) salvo em
-`/home/dvar/.claude/plans/cheerful-knitting-platypus.md`.
+vertical/interpolação/balanço hidrostático/campos de superfície.
 
-**Status**: Fases 1-6 implementadas e validadas campo-a-campo contra dado
-real de produção (caso SouthAmerica) — a maioria dos campos bate exato ou
-quase-exato; `lbc.*.nc` implementado e auto-consistente (validado contra o
-próprio `init.nc` no mesmo tempo, diff=0), mas a validação contra o
-`lbc.nc` real de produção não foi conclusiva (acharam-se indícios de que a
-própria referência tem pelo menos um campo com bug, `lbc_qv`). Falta a
-Fase 7 (rodar o `atmosphere_model` de verdade a partir desses arquivos).
-**Reproduzível pra qualquer malha/experimento**, não só SouthAmerica: os
-`config_*` são lidos do `namelist.init_atmosphere` real do experimento em
-tempo de execução (`namelist_config.F90`), não fixos no código.
+📄 **Documentação técnico-científica completa** (fundamentação teórica,
+equações de cada fase, achados/bugs investigados em detalhe, resultados de
+validação): [`doc_voronoi/relatorio_tecnico/`](../doc_voronoi/relatorio_tecnico/)
+(LaTeX, compile com `make` ou leia o `main.pdf` já gerado). Este README
+traz só um resumo operacional; ver também
+[`scripts/voronoi/README.md`](../scripts/voronoi/README.md) para a
+orquestração ponta-a-ponta.
+
+**Status**: pipeline completo (Fases 1-7) implementado e validado em duas
+camadas — numericamente, campo a campo, contra `init.nc`/`lbc.*.nc` reais
+de produção (caso SouthAmerica: a maioria dos campos bate exato ou
+quase-exato); e funcionalmente, rodando o `mpas_atmosphere` real a partir
+desses arquivos e obtendo uma previsão de 24h fisicamente sã, sem erros,
+cuja divergência frente à rota WPS cresce de forma suave e limitada ao
+longo da integração (padrão esperado de duas trajetórias vizinhas de um
+sistema caótico). **Reproduzível pra qualquer malha/experimento**, não só
+SouthAmerica: os `config_*` são lidos do `namelist.init_atmosphere` real
+do experimento em tempo de execução (`namelist_config.F90`), não fixos no
+código. Limitações conhecidas (não implementadas: mistura de terreno de
+fronteira, reamostragem vertical de solo, reclassificação de gelo
+marinho) documentadas em detalhe no relatório técnico.
 
 Programas novos (`src/*.F90`, buildados via `make`):
 1. `hinterp_native` — Fase 1, interpolação horizontal nativa (mesmo motor
@@ -226,8 +235,14 @@ cp <REGION>.static.nc init_completo.nc && ncks -A computed.nc init_completo.nc
                  saida_lbc.nc  'AAAA-MM-DD_HH:MM:SS'
 ```
 
-Por enquanto o pipeline de produção (`run_pipeline.sh`, seção 2.2) continua
-inalterado e é a rota recomendada/validada em produção.
+O orquestrador completo (recorte de malha → `init.nc`/`lbc.*.nc` →
+`mpas_atmosphere` real) está em
+[`scripts/voronoi/`](../scripts/voronoi/) — ver o README dessa pasta para
+a ordem de execução e as variáveis de ambiente configuráveis.
+
+O pipeline de produção original (`run_pipeline.sh`, seção 2.2, via WPS)
+continua presente sem alteração, como referência e para comparação lado a
+lado com esta rota nova.
 
 ---
 

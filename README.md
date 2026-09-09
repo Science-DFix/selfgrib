@@ -1,90 +1,148 @@
-# selfgrib
+# selfgrib — rota de interpolação nativa Voronoi-to-Voronoi
 
-> *self* + *GRIB* — porque o MPAS-A vira sua própria fonte de dados,
-> sem precisar de nenhum GRIB externo (GFS, BAM, Eta...). Ele lê a própria
-> saída global e usa pra alimentar a si mesmo. Autossuficiente, meio
-> narcisista, mas funciona.
+> *self* + *GRIB* — porque o MPAS-A vira sua própria fonte de dados, sem
+> precisar de nenhum GRIB externo (GFS, BAM, Eta...). Esta branch
+> (`feature/interpolacao-nativa-voronoi`) vai um passo além: em vez de
+> passar por uma grade lat-lon intermediária e pelo formato binário do
+> WPS, interpola **diretamente entre a malha de Voronoi nativa de
+> origem e a de destino**, escrevendo `init.nc`/`lbc.*.nc` prontos para
+> o `mpas_atmosphere`.
 
 ## O que é isso
 
-Um "ungrib" alternativo para o MPAS-A: em vez de decodificar GRIB de um
-modelo externo (GFS via `ungrib` do WPS, como normalmente se faz), essa
-ferramenta lê a saída **nativa** de uma rodada global do próprio MPAS-A
-(`history.nc`) e gera o mesmo formato binário intermediário que o
-`init_atmosphere_model` já sabe consumir — permitindo criar condição
-inicial e fronteira lateral para um novo domínio MPAS-A (regional ou
-global) **sem nenhum patch no código-fonte do MPAS-Model**.
+O ponto de partida é o **selfgrib**: um "ungrib" alternativo para o
+MPAS-A que lê a saída nativa (`history.nc`) de uma rodada global do
+próprio modelo e usa isso como fonte de dado meteorológico, eliminando a
+dependência de GRIB externo. Essa parte está descrita em detalhe em
+[`mpas2intermediate/README.md`](mpas2intermediate/README.md) e não é o
+foco deste README — vale a pena ler se você quer entender a motivação
+original do projeto, mas a rota que ele descreve (via formato WPS e
+grade lat-lon) **não é o que esta branch usa por padrão**.
+
+Esta branch resolve uma limitação estrutural daquela rota: o
+`init_atmosphere_model` original só aceita, como entrada, uma grade
+latitude-longitude regular — nunca uma lista de pontos dispersos. Isso
+significa que, por mais fina que seja a grade intermediária, o caminho
+`malha nativa → grade → malha nativa` sempre introduz um erro de
+interpolação de ida-e-volta, e uma classe real de bug já documentada
+(grade menor que a extensão real da malha regional, deixando células
+sem dado válido na fronteira).
+
+A rota implementada aqui interpola **diretamente entre as duas malhas
+de Voronoi** — a global de origem e a regional de destino — usando o
+mesmo método (interpolação baricêntrica na malha dual de Delaunay) já
+validado pela comunidade MPAS via o sistema de assimilação MPAS-DART
+(Ha et al., 2017, *MWR*), e reimplementa em Fortran, extraído
+literalmente do código-fonte de referência do MPAS-Model, tudo que o
+`init_atmosphere_model` faria a seguir — grade vertical, interpolação
+vertical, balanço hidrostático, campos de superfície — escrevendo
+`init.nc`/`lbc.*.nc` diretamente, sem grade intermediária e sem
+depender do `init_atmosphere_model` original para gerá-los.
+
+**Status**: validado em duas camadas — numericamente, campo a campo,
+contra arquivos reais de produção; e funcionalmente, executando o
+`mpas_atmosphere` real a partir dos arquivos gerados por esta rota e
+obtendo uma previsão de 24h fisicamente sã, sem erros.
+
+## Documentação científica completa
+
+A descrição completa do método — fundamentação teórica da malha de
+Voronoi/dual de Delaunay, revisão da literatura, cada fase da
+implementação com suas equações, os bugs reais encontrados e como
+foram diagnosticados, e os resultados de validação — está em um
+relatório técnico-científico em LaTeX:
+
+📄 **[`doc_voronoi/relatorio_tecnico/`](doc_voronoi/relatorio_tecnico/)**
+(compile com `make` dentro da pasta, requer `pdflatex`+`biber`; ou leia
+o `.pdf` já gerado, se presente).
+
+Esse é o documento de referência para quem quiser entender o *porquê*
+de cada decisão de implementação, não só o *como* — inclusive para uma
+eventual apresentação/defesa do trabalho. A pasta
+[`doc_voronoi/`](doc_voronoi/) também reúne os artigos de referência
+usados (malhas de Voronoi, coordenada vertical *terrain-following*,
+assimilação de dados no MPAS) e o protótipo inicial que validou a
+abordagem (`doc_voronoi/prototipo_scatter/`).
 
 ## Estrutura do repositório
 
 ```
-mpas2intermediate/     -- o "selfgrib" propriamente dito (pipeline Fortran)
-convert_mpas/           -- ferramenta da NCAR usada como dependencia (remapeamento horizontal)
-MPAS-Limited-Area/      -- ferramenta da NCAR para recortar regioes da malha global
-docs/                   -- referencias tecnicas (manuais MPAS-A, notas historicas)
+mpas2intermediate/      -- pipeline Fortran (rota antiga via WPS + rota nova nativa)
+  src/gen_vertical_grid.F90, gen_init_native.F90, gen_lbc_native.F90, hinterp_native.F90, ...
+convert_mpas/            -- ferramenta da NCAR, dependência (motor de pesos baricêntricos)
+MPAS-Limited-Area/       -- ferramenta da NCAR para recortar regiões da malha global
+scripts/
+  01_recorta_regiao.bash            -- reusado por ambas as rotas
+  02_*.bash .. 05_*.bash             -- rota antiga (via WPS), ver mpas2intermediate/README.md
+  voronoi/                          -- rota nova (esta branch), ver scripts/voronoi/README.md
+doc_voronoi/
+  relatorio_tecnico/                -- o documento científico completo (LaTeX)
+  *.pdf                             -- artigos de referência
+  prototipo_scatter/                -- protótipo inicial que validou o método
+docs/                    -- referências técnicas gerais do MPAS-A (manuais, notas)
 ```
 
-Cada subdiretório tem seu próprio `README.md`/`HOWTO_*.md` com detalhes de
-uso. Ponto de partida: [`mpas2intermediate/README.md`](mpas2intermediate/README.md)
-— tem instruções de compilação, como rodar, e a documentação técnica
-completa (de onde vieram as funções adaptadas, método de interpolação,
-campos gerados, bugs encontrados e corrigidos no caminho).
+## Compilação
 
-## Resultado que essa pipeline pode produzir
+```bash
+cd convert_mpas && make FC=gfortran && cd ..
+cd mpas2intermediate && make && cd ..
+```
 
-Ponta a ponta, sem GRIB externo: a partir de uma rodada global do próprio
-MPAS-A, o `selfgrib` gera condição inicial e fronteira lateral, que alimentam
-o `init_atmosphere_model` e o `mpas_atmosphere` normalmente. Abaixo, uma
-previsão regional de 24h (malha `SouthAmerica`, recorte de `x1.163842`,
-$\sim$60\,km de resolução) gerada inteiramente por esse caminho, para dar
-uma ideia visual do que sai no final.
+Isso gera, entre outros, os binários usados pela rota nativa:
+`hinterp_native`, `gen_vertical_grid`, `gen_init_native`,
+`gen_lbc_native` (e os da rota antiga: `extract_fields`,
+`pack_intermediate`). Requer um compilador Fortran (testado com
+`gfortran`) e as bibliotecas NetCDF-C/NetCDF-Fortran (`nf-config` no
+`PATH`).
 
-<table>
-<tr>
-<td width="50%">
-<img src="docs/resultados/00_dominio_terreno_lbc.png" alt="Domínio e terreno"><br>
-<sub><b>Domínio da malha regional</b>: terreno (m) e zona de fronteira/relaxamento (LBC) em vermelho.</sub>
-</td>
-<td width="50%">
-<img src="docs/resultados/08_malha_nativa_favodemel_zoom.png" alt="Malha nativa hexagonal"><br>
-<sub><b>Malha nativa MPAS</b>: células de Voronoi reais (hexágonos/pentágonos, sem suavização), zoom na Amazônia central, coloridas por CAPE.</sub>
-</td>
-</tr>
-<tr>
-<td width="50%">
-<img src="docs/resultados/02_mslp_vento10m_24h.png" alt="MSLP e vento 10m"><br>
-<sub><b>Pressão ao nível do mar + vento a 10m</b> em 24h — ciclone extratropical bem definido no sul.</sub>
-</td>
-<td width="50%">
-<img src="docs/resultados/04_geopotencial_vento_500hPa_24h.png" alt="Geopotencial 500hPa"><br>
-<sub><b>Altura geopotencial e vento em 500 hPa</b> — jato subtropical visível.</sub>
-</td>
-</tr>
-<tr>
-<td width="50%">
-<img src="docs/resultados/05b_cape_24h_polygons.png" alt="CAPE 24h"><br>
-<sub><b>CAPE</b> ao final das 24h — máximo amazônico consistente com ciclo diurno convectivo.</sub>
-</td>
-<td width="50%">
-<img src="docs/resultados/06_olr_24h.png" alt="OLR"><br>
-<sub><b>Radiação de onda longa no topo da atmosfera (OLR)</b> — proxy de convecção profunda.</sub>
-</td>
-</tr>
-</table>
+## Como rodar (rota nativa)
 
-<img src="docs/resultados/03_temperatura_2m_24h.png" alt="Temperatura 2m" width="70%">
+Ordem de execução completa, do recorte da malha até a previsão real —
+ver [`scripts/voronoi/README.md`](scripts/voronoi/README.md) para a
+lista de variáveis de ambiente configuráveis e o detalhe de cada passo:
 
-*Temperatura a 2m válida em 24h.*
+```bash
+export DIR_VORONOI=/caminho/para/este/repo
+export DIR_RODADA_GLOBAL=/caminho/para/uma/rodada/global/ja/concluida
+export REGION_NAME=SouthAmerica   # ou outra malha ja recortada
+export TIMES="2026-01-01_00 2026-01-01_06 2026-01-01_12 2026-01-01_18 2026-01-02_00"
 
-Todas as figuras (mais detalhes de método, bugs de interpolação
-encontrados/corrigidos e equações usadas) estão documentadas em
-[`mpas2intermediate/README.md`](mpas2intermediate/README.md#61-bugs-reais-encontrados-durante-o-desenvolvimento-e-correção)
-e na seção 9 do mesmo arquivo (pontos em aberto no MPAS-Model upstream).
+bash scripts/01_recorta_regiao.bash                    # 1. recorta a malha (reusado da rota antiga)
+bash scripts/voronoi/02_extrai_first_guess.bash        # 2. extract_fields, malha global
+bash scripts/voronoi/03_interp_horizontal_nativa.bash  # 3. interpolação baricêntrica malha->malha
+bash scripts/voronoi/04_gera_init_native.bash          # 4. init.nc completo (grade vertical + hidrostático + superfície)
+bash scripts/voronoi/05_gera_lbc_native.bash           # 5. lbc.*.nc, um por tempo de fronteira
+bash scripts/voronoi/06_roda_previsao_native.bash      # 6. roda o mpas_atmosphere real a partir desses arquivos
+```
+
+Cada script é idempotente (pula o que já existe) e configurável via
+variáveis de ambiente com defaults sensatos — rode sem nada exportado
+para reproduzir o caso de validação (`SouthAmerica`, ~60km, 24h a
+partir de `2026-01-01_00`) documentado no relatório técnico.
+
+## A rota original (via WPS)
+
+Ainda presente neste repositório, sem alteração, como referência e
+fallback: [`scripts/01_recorta_regiao.bash`](scripts/01_recorta_regiao.bash)
+até [`scripts/05_roda_previsao.bash`](scripts/05_roda_previsao.bash),
+documentada em detalhe (arquitetura, bugs reais encontrados e
+corrigidos, galeria de resultados) em
+[`mpas2intermediate/README.md`](mpas2intermediate/README.md). As duas
+rotas compartilham o mesmo passo de recorte de malha
+(`01_recorta_regiao.bash`) e podem ser comparadas lado a lado a partir
+do mesmo caso de estudo — é exatamente essa comparação que valida a
+rota nativa no relatório técnico.
 
 ## Origem
 
-Nasceu de uma pergunta simples: "dá pra gerar condição inicial do MPAS-A
-usando uma rodada global do próprio MPAS-A, em vez de depender de GRIB
-externo?" A resposta, depois de bastante investigação no código-fonte do
-`init_atmosphere_model` e comparação direta com arquivos de produção reais,
-foi sim — e o resultado está aqui.
+Nasceu de uma pergunta simples: "dá pra gerar condição inicial do
+MPAS-A usando uma rodada global do próprio MPAS-A, em vez de depender
+de GRIB externo?" A resposta foi sim (rota original, via WPS). Uma
+segunda pergunta, motivada por uma limitação estrutural encontrada no
+caminho, levou a esta branch: "dá pra eliminar também a grade
+intermediária, interpolando direto entre as duas malhas de Voronoi?" A
+resposta, depois de investigar o código-fonte real do
+`init_atmosphere_model`, comparar numericamente contra arquivos de
+produção reais, e finalmente rodar o `mpas_atmosphere` de verdade a
+partir do resultado, também foi sim.

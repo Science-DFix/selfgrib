@@ -8,8 +8,25 @@ mpas2intermediate/gen_vertical_grid
 mpas2intermediate/gen_init_native
 mpas2intermediate/gen_lbc_native
 
-# material de referencia (PDFs grandes, nao e' codigo)
-doc_voronoi/
+# doc_voronoi/: versiona relatorio_tecnico/, prototipo_scatter/ e conteudo.txt
+# (codigo/tex/notas proprios), mas nao os PDFs de artigos de referencia soltos
+# na raiz (grandes, nao sao produzidos por este projeto) nem metadados de
+# download do navegador.
+doc_voronoi/*.pdf
+doc_voronoi/*:Zone.Identifier
+
+# artefatos de compilacao do LaTeX (reproduzem via `make` em relatorio_tecnico/)
+doc_voronoi/relatorio_tecnico/*.aux
+doc_voronoi/relatorio_tecnico/capitulos/*.aux
+doc_voronoi/relatorio_tecnico/*.bbl
+doc_voronoi/relatorio_tecnico/*.bcf
+doc_voronoi/relatorio_tecnico/*.blg
+doc_voronoi/relatorio_tecnico/*.out
+doc_voronoi/relatorio_tecnico/*.run.xml
+doc_voronoi/relatorio_tecnico/*.toc
+doc_voronoi/relatorio_tecnico/*.lof
+doc_voronoi/relatorio_tecnico/*.lot
+
 convert_mpas/convert_mpas
 convert_mpas/src/*.o
 convert_mpas/src/*.mod
