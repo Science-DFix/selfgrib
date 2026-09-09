@@ -284,7 +284,20 @@ program gen_lbc_native
     stat = nf90_put_var(ncid, vid_w,     w,     start=(/1,1,1/), count=(/nVertLevels+1,nCells,1/))
     stat = nf90_put_var(ncid, vid_rho,   rho,   start=(/1,1,1/), count=(/nVertLevels,nCells,1/))
     stat = nf90_put_var(ncid, vid_theta, theta, start=(/1,1,1/), count=(/nVertLevels,nCells,1/))
-    stat = nf90_put_var(ncid, vid_xtime, trim(valid_time)//'.0000', start=(/1,1/), count=(/64,1/))
+    block
+        ! Achado 2026-09-09 rodando o mpas_atmosphere de verdade no Jaci:
+        ! passar trim(valid_time)//'.0000' (string de 24 chars) direto pro
+        ! nf90_put_var com count=(/64,1/) deixava os 40 bytes restantes do
+        ! campo com lixo nao inicializado (nao necessariamente espacos) --
+        ! o parser de data do framework (mpas_timekeeping.F) e' rigido
+        ! (read formatado por posicao fixa) e travava com "Bad integer for
+        ! item 1 in list input" ao ler esse lixo. Fix: string declarada
+        ! com o tamanho certo (64, preenchida com espaco pelo Fortran),
+        ! mesmo padrao ja usado em gen_init_native.F90.
+        character (len=64) :: xtime_str
+        xtime_str = trim(valid_time)//'.0000'
+        stat = nf90_put_var(ncid, vid_xtime, xtime_str, start=(/1,1/), count=(/64,1/))
+    end block
 
     stat = nf90_close(ncid)
     write(0,*) 'Pronto.'
