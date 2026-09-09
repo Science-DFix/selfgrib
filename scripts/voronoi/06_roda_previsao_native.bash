@@ -28,6 +28,23 @@ set -euo pipefail
 
 # --- Ambiente do cluster (módulos, MPI, NetCDF) ---
 ENV_ALL="${ENV_ALL:-/lustre/projetos/satdas/diego_workdir/env_wrf_wps.bash}"
+
+# $ENV_ALL roda 'conda deactivate' -- mas isso so' funciona como funcao de
+# shell se o hook do conda ja foi carregado. Rodando este script como
+# `bash script.bash` (shell nao-interativo), o ~/.bashrc NAO e' lido por
+# default mesmo com 'conda init' ja feito uma vez (so' shells interativos
+# leem .bashrc) -- 'conda deactivate' vira so' o binario cru, que falha com
+# "CondaError: Run 'conda init' before 'conda deactivate'". Carrega o hook
+# aqui, de forma defensiva, antes de $ENV_ALL precisar dele (achado
+# 2026-09-09 rodando de verdade no Jaci).
+if command -v conda >/dev/null 2>&1 && ! type deactivate >/dev/null 2>&1; then
+    CONDA_BASE_DIR="$(conda info --base 2>/dev/null || true)"
+    if [ -n "$CONDA_BASE_DIR" ] && [ -f "${CONDA_BASE_DIR}/etc/profile.d/conda.sh" ]; then
+        # shellcheck disable=SC1091
+        source "${CONDA_BASE_DIR}/etc/profile.d/conda.sh"
+    fi
+fi
+
 [ -f "$ENV_ALL" ] && source "$ENV_ALL"
 
 # --- Templates de namelist/streams (mesmos usados em produção) ---
