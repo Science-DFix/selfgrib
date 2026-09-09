@@ -544,8 +544,9 @@ program gen_init_native
     call defvar1(ncid, 'fzp',  dimid_nVertLevels)
 
     block
-        integer :: dimid_two, vid_zb, vid_zb3, vid_cf1, vid_cf2, vid_cf3, vid_it
-        integer :: dimid_strlen
+        integer :: dimid_two, vid_zb, vid_zb3, vid_cf1, vid_cf2, vid_cf3, vid_it, vid_xtime
+        integer :: dimid_strlen, dimid_time
+        character (len=64) :: xtime_str
         stat = nf90_def_dim(ncid, 'TWO', 2, dimid_two)
         stat = nf90_def_var(ncid, 'zb',  NF90_DOUBLE, (/dimid_nVertLevels,dimid_two,dimid_nEdges/), vid_zb)
         stat = nf90_def_var(ncid, 'zb3', NF90_DOUBLE, (/dimid_nVertLevels,dimid_two,dimid_nEdges/), vid_zb3)
@@ -554,13 +555,26 @@ program gen_init_native
         stat = nf90_def_var(ncid, 'cf3', NF90_DOUBLE, vid_cf3)
         stat = nf90_def_dim(ncid, 'StrLen', 64, dimid_strlen)
         stat = nf90_def_var(ncid, 'initial_time', NF90_CHAR, (/dimid_strlen/), vid_it)
+        ! xtime(Time,StrLen): achado 2026-09-09 rodando o mpas_atmosphere de
+        ! verdade no Jaci -- faltava essa variavel (existe no init.nc real,
+        ! vista na lista de 135 variaveis mas nao percebida como faltando
+        ! na primeira leitura). E' o xtime, NAO o initial_time, que o
+        ! mpas_atmosphere usa pra confirmar que o arquivo contem o tempo
+        ! pedido em config_start_time -- sem ela, "ERROR: File ... does not
+        ! contain the time ...". Mesmo dado do initial_time, so' que
+        ! Time-dependente (igual ao xtime ja escrito em gen_lbc_native.F90,
+        ! que sempre funcionou).
+        stat = nf90_def_dim(ncid, 'Time', 1, dimid_time)
+        stat = nf90_def_var(ncid, 'xtime', NF90_CHAR, (/dimid_strlen,dimid_time/), vid_xtime)
         stat = nf90_enddef(ncid)
         stat = nf90_put_var(ncid, vid_zb,  zb(1:nVertLevels,:,:))
         stat = nf90_put_var(ncid, vid_zb3, zb3(1:nVertLevels,:,:))
         stat = nf90_put_var(ncid, vid_cf1, cf1)
         stat = nf90_put_var(ncid, vid_cf2, cf2)
         stat = nf90_put_var(ncid, vid_cf3, cf3)
-        stat = nf90_put_var(ncid, vid_it, trim(cfg % config_start_time)//'.0000')
+        xtime_str = trim(cfg % config_start_time)//'.0000'
+        stat = nf90_put_var(ncid, vid_it, xtime_str)
+        stat = nf90_put_var(ncid, vid_xtime, xtime_str, start=(/1,1/), count=(/64,1/))
     end block
 
     call putvar2(ncid, 'zgrid', zgrid)
