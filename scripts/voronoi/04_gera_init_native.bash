@@ -65,7 +65,10 @@ cp -f "$STATIC_REGIONAL" "$INIT_FILE"
 ncks -A "$COMPUTED" "$INIT_FILE"
 
 if [ -f "$INIT_FILE" ] && [ -s "$INIT_FILE" ]; then
-    n_vars=$(ncdump -h "$INIT_FILE" | grep -c '^\s*[a-zA-Z].*;$' || true)
+    # Conta so' declaracoes de variavel (linha com "nome(dims)"), nao
+    # atributos (que tambem terminam em ";" e batiam no grep antigo,
+    # inflando a contagem -- achado 2026-09-09 numa rodada real no Jaci).
+    n_vars=$(ncdump -h "$INIT_FILE" | sed -n '/^variables:/,/^$/p' | grep -cE '^[[:space:]]+[a-zA-Z_].*\([a-zA-Z_]' || true)
     echo "--- SUCESSO: ${INIT_FILE} (~${n_vars} variáveis) ---"
     ls -lh "$INIT_FILE"
 else
