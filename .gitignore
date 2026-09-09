@@ -3,6 +3,13 @@ mpas2intermediate/obj/
 mpas2intermediate/extract_fields
 mpas2intermediate/pack_intermediate
 mpas2intermediate/test_interp
+mpas2intermediate/hinterp_native
+mpas2intermediate/gen_vertical_grid
+mpas2intermediate/gen_init_native
+mpas2intermediate/gen_lbc_native
+
+# material de referencia (PDFs grandes, nao e' codigo)
+doc_voronoi/
 convert_mpas/convert_mpas
 convert_mpas/src/*.o
 convert_mpas/src/*.mod

@@ -178,6 +178,57 @@ esta ferramenta. `history.nc` sempre tem tudo pronto porque o MPAS grava a
 malha completa e todos os campos de estado físico em todo `output` stream
 por padrão.
 
+### 2.4. Interpolação nativa Voronoi — `init.nc`/`lbc.*.nc` direto, sem WPS (experimental)
+
+Em desenvolvimento (branch `feature/interpolacao-nativa-voronoi`): uma rota
+alternativa que pula o formato binário WPS e o `init_atmosphere_model`
+inteiramente para a etapa de horizontal/vertical/hidrostático, escrevendo
+`init.nc`/`lbc.*.nc` diretamente. Elimina por construção a classe de bug de
+"grade menor que a extensão real da malha" (§6.1) e o erro de round-trip
+que uma grade lat-lon intermediária introduz mesmo bem dimensionada.
+Método: interpolação baricêntrica na malha dual de Delaunay (mesma técnica
+do MPAS-DART, Ha et al. 2017 MWR) + extração literal das rotinas reais do
+MPAS-Model (fonte de produção, mpas-bundle 3.0.2) para grade
+vertical/interpolação/balanço hidrostático/campos de superfície. Plano de
+implementação completo (achados, fórmulas, números de validação) salvo em
+`/home/dvar/.claude/plans/cheerful-knitting-platypus.md`.
+
+**Status**: Fases 1-6 implementadas e validadas campo-a-campo contra dado
+real de produção (caso SouthAmerica) — a maioria dos campos bate exato ou
+quase-exato; `lbc.*.nc` implementado e auto-consistente (validado contra o
+próprio `init.nc` no mesmo tempo, diff=0), mas a validação contra o
+`lbc.nc` real de produção não foi conclusiva (acharam-se indícios de que a
+própria referência tem pelo menos um campo com bug, `lbc_qv`). Falta a
+Fase 7 (rodar o `atmosphere_model` de verdade a partir desses arquivos).
+**Reproduzível pra qualquer malha/experimento**, não só SouthAmerica: os
+`config_*` são lidos do `namelist.init_atmosphere` real do experimento em
+tempo de execução (`namelist_config.F90`), não fixos no código.
+
+Programas novos (`src/*.F90`, buildados via `make`):
+1. `hinterp_native` — Fase 1, interpolação horizontal nativa (mesmo motor
+   de pesos do `convert_mpas`, `remapper.F90`/`target_mesh.F90`, só
+   trocando grade lat-lon por lista de pontos dispersos).
+2. `gen_vertical_grid` — Fase 2, grade vertical nativa (`vertical_grid.F90`).
+3. `gen_init_native` — Fases 2+3+4+6, escritor completo do `init.nc`
+   (`vinterp_native.F90`, `hydrostatic.F90`, `surface_fields.F90`).
+4. `gen_lbc_native` — Fase 7 parcial, escritor do `lbc.*.nc` (reusa a
+   malha vertical do `init.nc`, não recalcula).
+
+```bash
+./hinterp_native <REGION>.static.nc  history.AAAA-MM-DD_HH.00.00.nc  extracted.nc
+# gera native_target.nc (campos remapeados pros centros de celula da malha-alvo)
+
+./gen_init_native <REGION>.static.nc  namelist.init_atmosphere  native_target.nc  computed.nc
+cp <REGION>.static.nc init_completo.nc && ncks -A computed.nc init_completo.nc
+# init_completo.nc = init.nc completo (135 variaveis)
+
+./gen_lbc_native init_completo.nc  namelist.init_atmosphere  native_target_<tempo>.nc  \
+                 saida_lbc.nc  'AAAA-MM-DD_HH:MM:SS'
+```
+
+Por enquanto o pipeline de produção (`run_pipeline.sh`, seção 2.2) continua
+inalterado e é a rota recomendada/validada em produção.
+
 ---
 
 ## 3. Arquitetura (3 estágios)
