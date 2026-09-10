@@ -44,6 +44,68 @@ contra arquivos reais de produção; e funcionalmente, executando o
 `mpas_atmosphere` real a partir dos arquivos gerados por esta rota e
 obtendo uma previsão de 24h fisicamente sã, sem erros.
 
+## Resultado que essa rota pode produzir
+
+A partir de uma malha global de origem e da malha regional `SouthAmerica`
+(recorte de `x1.163842`, ~60km), gerando `init.nc`/`lbc.*.nc` diretamente
+por esta rota (sem WPS, sem `init_atmosphere_model` original) e rodando o
+`mpas_atmosphere` real a partir deles: uma previsão de 24h fisicamente sã,
+a partir de `2026-01-01_00`.
+
+<table>
+<tr>
+<td width="50%">
+<img src="docs/resultados_voronoi/00_dominio_terreno_lbc.png" alt="Domínio e terreno"><br>
+<sub><b>Domínio da malha regional</b>: terreno (m) e zona de fronteira/relaxamento (LBC) em vermelho.</sub>
+</td>
+<td width="50%">
+<img src="docs/resultados_voronoi/01_malha_nativa_zoom_cape.png" alt="Malha nativa hexagonal"><br>
+<sub><b>Malha nativa MPAS</b>: células de Voronoi reais (hexágonos/pentágonos, sem suavização), zoom na Amazônia central, coloridas por CAPE em +24h.</sub>
+</td>
+</tr>
+<tr>
+<td width="50%">
+<img src="docs/resultados_voronoi/02_mslp_vento10m_24h.png" alt="MSLP e vento 10m"><br>
+<sub><b>Pressão ao nível do mar + vento a 10m</b> em +24h — ciclone extratropical bem definido no sul.</sub>
+</td>
+<td width="50%">
+<img src="docs/resultados_voronoi/04_geopotencial_vento_500hPa_24h.png" alt="Geopotencial 500hPa"><br>
+<sub><b>Altura geopotencial e vento em 500 hPa</b> — jato subtropical visível.</sub>
+</td>
+</tr>
+<tr>
+<td width="50%">
+<img src="docs/resultados_voronoi/05_precipitacao_acumulada_24h.png" alt="Precipitação acumulada 24h"><br>
+<sub><b>Precipitação acumulada em 24h</b> — máximo no Chocó/vertente andina, padrão fisicamente coerente.</sub>
+</td>
+<td width="50%">
+<img src="docs/resultados_voronoi/06_cape_24h.png" alt="CAPE 24h"><br>
+<sub><b>CAPE</b> ao final das 24h — máximo amazônico consistente com ciclo diurno convectivo.</sub>
+</td>
+</tr>
+<tr>
+<td width="50%">
+<img src="docs/resultados_voronoi/03_temperatura_2m_24h.png" alt="Temperatura 2m"><br>
+<sub><b>Temperatura a 2m</b> válida em +24h.</sub>
+</td>
+<td width="50%">
+<img src="docs/resultados_voronoi/07_olr_24h.png" alt="OLR"><br>
+<sub><b>Radiação de onda longa no topo da atmosfera (OLR)</b> — proxy de convecção profunda.</sub>
+</td>
+</tr>
+</table>
+
+<img src="docs/resultados_voronoi/08_evolucao_precip_cape_cin.png" alt="Evolução temporal precip/CAPE/CIN" width="70%">
+
+*Evolução temporal (0–24h) de precipitação, CAPE e CIN médios no domínio —
+crescimento físico acompanhando o ciclo diurno CAPE-cima/CIN-baixo.*
+
+Essas figuras vêm diretamente da saída (`diag.*.nc`) da mesma previsão
+usada para validar a rota nativa — ver
+[`scripts/voronoi/README.md`](scripts/voronoi/README.md) para a
+orquestração completa e o relatório técnico local
+(`doc_voronoi/relatorio_tecnico/`) para a validação numérica campo a campo.
+
 ## Documentação científica completa
 
 A descrição completa do método — fundamentação teórica da malha de
