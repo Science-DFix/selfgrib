@@ -21,10 +21,20 @@
 !    ausente = cellsOnCell(j,iCell) == 0 (borda de malha regional/limited-area).
 !    Mesmo efeito fisico (condicao de contorno Neumann/gradiente-zero): o
 !    valor do "vizinho" ausente e' igualado ao da propria celula.
-!  - config_hybrid_coordinate nao implementado (nao aparece nos namelists
-!    reais consultados -- default false, ah(k) = 1 - zw(k)/zt sempre).
 !  - config_specified_zeta_levels nao implementado (vazio nos namelists
 !    reais -- sempre cai no branch config_tc_vertical_grid).
+!
+! NOTA (2026-09-09, corrige comentario antigo): config_hybrid_coordinate
+! ESTA implementado (ver argumento homonimo de compute_vertical_grid) --
+! nao aparece explicitamente nos namelists reais porque o default do
+! Registry.xml ja e' "true" (achado da investigacao da divergencia de
+! ~2km na grade vertical, ver doc_voronoi/relatorio_tecnico ou memoria
+! project-vertical-grid-divergence). config_smooth_surfaces (logical,
+! liga/desliga a suavizacao iterativa de hx por nivel) tambem NAO esta
+! conectado ainda -- a suavizacao roda incondicionalmente quando
+! config_nsm>0, o que so' e' equivalente a config_smooth_surfaces=true
+! (o default, e o valor usado no unico caso validado) -- ver
+! doc_voronoi/PLANO_FIDELIDADE.md, item 6.
 !
 ! IMPORTANTE (achado em 2026-09-08, validando contra SouthAmerica.init.nc
 ! real): o binario real do init_atmosphere_model usado em produção foi
@@ -52,7 +62,7 @@ module vertical_grid
 
     integer, parameter :: SPKIND = selected_real_kind(6)
 
-    public :: compute_vertical_grid, compute_zb
+    public :: compute_vertical_grid, compute_zb, blend_bdy_terrain_native
 
     contains
 
@@ -346,6 +356,66 @@ module vertical_grid
         deallocate(hx)
 
     end subroutine compute_vertical_grid
+
+
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    ! blend_bdy_terrain_native
+    !
+    ! Mistura o terreno da malha-alvo (ter, de static.nc) com o terreno do
+    ! first-guess no anel de fronteira (bdyMaskCell > 0), ANTES de gerar a
+    ! grade vertical -- item 1 do plano de fidelidade
+    ! (doc_voronoi/PLANO_FIDELIDADE.md). Extraido/adaptado de
+    ! mpas_init_atm_cases.F :: blend_bdy_terrain (MPAS-Dev/MPAS-Model,
+    ! mpas-bundle-3.0.2, ~linha 6791), chamado quando
+    ! config_blend_bdy_terrain=.true., logo antes do bloco
+    ! "if (config_vertical_grid) then" que contem a suavizacao de 4a ordem
+    ! do terreno (a suavizacao ja implementada acima, em
+    ! compute_vertical_grid, opera sobre o terreno JA misturado).
+    !
+    ! Diferenca deliberada do original: la', o terreno do first-guess vem
+    ! de reler o campo SOILHGT direto de um arquivo binario intermediario
+    ! WPS (projecao lat-lon) e reinterpolar bilinearmente (FOUR_POINT) pra
+    ! cada celula de fronteira. Na rota nativa, SOILHGT ja foi interpolado
+    ! baricentricamente pra cada celula da malha-alvo na Fase 1
+    ! (hinterp_native, generico sobre todos os campos do first-guess ->
+    ! native_target.nc) -- entao usamos esse valor diretamente, sem
+    ! nenhuma reprojecao/reinterpolacao adicional (confirmado presente e
+    ! com valores fisicamente plausiveis num native_target.nc real).
+    !
+    ! nBdyLayers/nSpecLayers sao constantes fixas no original (nao
+    ! configuraveis via namelist) -- confirmadas batendo contra
+    ! bdyMaskCell real da malha SouthAmerica (max=7, exatamente
+    ! nBdyLayers=7).
+    subroutine blend_bdy_terrain_native(nCells, bdyMaskCell, soilhgt_fg, ter)
+
+        implicit none
+
+        integer, intent(in) :: nCells
+        integer, dimension(nCells), intent(in) :: bdyMaskCell
+        real (kind=RKIND), dimension(nCells), intent(in) :: soilhgt_fg
+        real (kind=RKIND), dimension(nCells), intent(inout) :: ter
+
+        integer, parameter :: nBdyLayers = 7   ! camadas de relaxamento + especificadas
+        integer, parameter :: nSpecLayers = 2  ! camadas especificadas (fronteira externa)
+
+        integer :: iCell
+        real (kind=RKIND) :: weight
+
+        do iCell = 1, nCells
+            if (bdyMaskCell(iCell) > 0) then
+                if (bdyMaskCell(iCell) > (nBdyLayers - nSpecLayers)) then
+                    ! Celula "especificada": terreno = first-guess direto, sem mistura.
+                    ter(iCell) = soilhgt_fg(iCell)
+                else
+                    ! Celula de "relaxamento": combinacao ponderada, peso cresce
+                    ! em direcao a fronteira (bdyMaskCell maior).
+                    weight = real(bdyMaskCell(iCell), RKIND) / real(nBdyLayers - nSpecLayers, RKIND)
+                    ter(iCell) = weight * soilhgt_fg(iCell) + (1.0_RKIND - weight) * ter(iCell)
+                end if
+            end if
+        end do
+
+    end subroutine blend_bdy_terrain_native
 
 
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!

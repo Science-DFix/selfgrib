@@ -48,7 +48,7 @@ program gen_init_native
     real (kind=RKIND), parameter :: dzs_const(nSoilLevels) = (/0.1_RKIND, 0.3_RKIND, 0.6_RKIND, 1.0_RKIND/)
     real (kind=RKIND), parameter :: zs_const(nSoilLevels)  = (/0.05_RKIND, 0.25_RKIND, 0.70_RKIND, 1.50_RKIND/)
 
-    integer, dimension(:), allocatable :: nEdgesOnCell
+    integer, dimension(:), allocatable :: nEdgesOnCell, bdyMaskCell
     integer, dimension(:,:), allocatable :: cellsOnCell, edgesOnCell, cellsOnEdge
     real (kind=RKIND), dimension(:), allocatable :: dvEdge, dcEdge, ter, areaCell, angleEdge
     real (kind=RKIND), dimension(:,:,:), allocatable :: deriv_two
@@ -163,6 +163,11 @@ program gen_init_native
     allocate(ter(nCells)); ter = real(field % array1r, RKIND)
     stat = scan_input_free_field(field)
 
+    stat = scan_input_for_field(handle, 'bdyMaskCell', field)
+    stat = scan_input_read_field(field)
+    allocate(bdyMaskCell(nCells)); bdyMaskCell = field % array1i
+    stat = scan_input_free_field(field)
+
     stat = scan_input_for_field(handle, 'areaCell', field)
     stat = scan_input_read_field(field)
     allocate(areaCell(nCells)); areaCell = real(field % array1r, RKIND)
@@ -222,6 +227,29 @@ program gen_init_native
     end block
 
     write(0,*) '  nCells=', nCells, ' nEdges=', nEdges, ' maxEdges=', maxEdges
+
+    !-----------------------------------------------------------------
+    ! 1b) Mistura de terreno de fronteira (config_blend_bdy_terrain) --
+    ! item 1 do plano de fidelidade (doc_voronoi/PLANO_FIDELIDADE.md).
+    ! Precisa do SOILHGT do first-guess ja' interpolado pela Fase 1
+    ! (hinterp_native -> native_target.nc) -- leitura minima aqui, so'
+    ! desse campo; a leitura completa do first-guess (secao 3, abaixo)
+    ! re-le SOILHGT de novo pro calculo de skintemp -- redundante mas
+    ! inofensivo (arquivo pequeno), evita reordenar todo o programa.
+    !-----------------------------------------------------------------
+    if (cfg % config_blend_bdy_terrain) then
+        write(0,*) 'Misturando terreno de fronteira com first-guess (config_blend_bdy_terrain=true)'
+        block
+            integer :: ncid_soilhgt
+            real (kind=RKIND), dimension(:), allocatable :: soilhgt_fg_early
+            allocate(soilhgt_fg_early(nCells))
+            stat = nf90_open(trim(fg_filename), NF90_NOWRITE, ncid_soilhgt)
+            call read2d(ncid_soilhgt, 'SOILHGT', nCells, soilhgt_fg_early)
+            stat = nf90_close(ncid_soilhgt)
+            call blend_bdy_terrain_native(nCells, bdyMaskCell, soilhgt_fg_early, ter)
+            deallocate(soilhgt_fg_early)
+        end block
+    end if
 
     !-----------------------------------------------------------------
     ! 2) Fase 2: grade vertical nativa + zb/zb3
