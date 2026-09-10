@@ -139,7 +139,10 @@ program gen_vertical_grid
                                 ter_smoothed)
 
     write(0,*) 'Escrevendo '''//trim(output_filename)//''''
-    stat = nf90_create(output_filename, NF90_CLOBBER, ncid)
+    ! CDF-5, mesma correcao aplicada em extract_fields.F90/gen_init_native.F90/
+    ! gen_lbc_native.F90 -- ver comentario la para o racional (limite de
+    ! ~2GiB por variavel do formato classico, achado rodando a malha 15km).
+    stat = nf90_create(output_filename, IOR(NF90_CLOBBER, NF90_64BIT_DATA), ncid)
     stat = nf90_def_dim(ncid, 'nCells', nCells, dimid_nCells)
     stat = nf90_def_dim(ncid, 'nEdges', nEdges, dimid_nEdges)
     stat = nf90_def_dim(ncid, 'nVertLevels', nVertLevels, dimid_nVertLevels)

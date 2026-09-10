@@ -590,7 +590,9 @@ program gen_init_native
     ! 6) Escreve saida
     !-----------------------------------------------------------------
     write(0,*) 'Escrevendo '''//trim(output_filename)//''''
-    stat = nf90_create(output_filename, NF90_CLOBBER, ncid)
+    ! CDF-5, ver extract_fields.F90 para o racional (limite de ~2GiB por
+    ! variavel do formato classico, achado rodando a malha 15km).
+    stat = nf90_create(output_filename, IOR(NF90_CLOBBER, NF90_64BIT_DATA), ncid)
     stat = nf90_def_dim(ncid, 'nCells', nCells, dimid_nCells)
     stat = nf90_def_dim(ncid, 'nEdges', nEdges, dimid_nEdges)
     stat = nf90_def_dim(ncid, 'nVertLevels', nVertLevels, dimid_nVertLevels)

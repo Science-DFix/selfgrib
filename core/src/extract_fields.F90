@@ -428,7 +428,13 @@ contains
       soilnames_sm = (/ 'SM000010', 'SM010040', 'SM040100', 'SM100200' /)
       soilnames_st = (/ 'ST000010', 'ST010040', 'ST040100', 'ST100200' /)
 
-      call check( nf90_create(trim(outfile), NF90_CLOBBER, ncid_out) )
+      ! CDF-5 (NF90_64BIT_DATA): o formato classico (NF90_CLOBBER puro) limita
+      ! cada variavel nao-record a ~2GiB -- suficiente na malha global 60km
+      ! (163842 celulas) mas nao na 15km (2621442 celulas, ~16x mais: TT/UU/
+      ! VV/GHT/SPECHUMD/RH em 61 niveis de pressao estouram esse limite).
+      ! Mesma convencao de formato ja usada no resto do pipeline (streams.*
+      ! do MPAS-A usam io_type="pnetcdf,cdf5").
+      call check( nf90_create(trim(outfile), IOR(NF90_CLOBBER, NF90_64BIT_DATA), ncid_out) )
 
       call check( nf90_def_dim(ncid_out, 'nCells', nCells, dimCells) )
       call check( nf90_def_dim(ncid_out, 'nPressureLevels', N_PLEVELS, dimPLev) )
