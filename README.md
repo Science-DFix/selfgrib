@@ -50,11 +50,10 @@ A descrição completa do método — fundamentação teórica da malha de
 Voronoi/dual de Delaunay, revisão da literatura, cada fase da
 implementação com suas equações, os bugs reais encontrados e como
 foram diagnosticados, e os resultados de validação — está em um
-relatório técnico-científico em LaTeX:
-
-📄 **[`doc_voronoi/relatorio_tecnico/`](doc_voronoi/relatorio_tecnico/)**
-(compile com `make` dentro da pasta, requer `pdflatex`+`biber`; ou leia
-o `.pdf` já gerado, se presente).
+relatório técnico-científico em LaTeX, mantido **apenas localmente**
+(fora do controle de versão, por não ser destinado a compartilhamento
+público neste momento): `doc_voronoi/relatorio_tecnico/` (compile com
+`make` dentro da pasta, requer `pdflatex`+`biber`).
 
 Esse é o documento de referência para quem quiser entender o *porquê*
 de cada decisão de implementação, não só o *como* — inclusive para uma
@@ -76,7 +75,7 @@ scripts/
   02_*.bash .. 05_*.bash             -- rota antiga (via WPS), ver mpas2intermediate/README.md
   voronoi/                          -- rota nova (esta branch), ver scripts/voronoi/README.md
 doc_voronoi/
-  relatorio_tecnico/                -- o documento científico completo (LaTeX)
+  relatorio_tecnico/                -- documento científico completo (LaTeX, apenas local, fora do git)
   *.pdf                             -- artigos de referência
   prototipo_scatter/                -- protótipo inicial que validou o método
 docs/                    -- referências técnicas gerais do MPAS-A (manuais, notas)

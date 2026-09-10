@@ -8,24 +8,15 @@ mpas2intermediate/gen_vertical_grid
 mpas2intermediate/gen_init_native
 mpas2intermediate/gen_lbc_native
 
-# doc_voronoi/: versiona relatorio_tecnico/, prototipo_scatter/ e conteudo.txt
-# (codigo/tex/notas proprios), mas nao os PDFs de artigos de referencia soltos
-# na raiz (grandes, nao sao produzidos por este projeto) nem metadados de
-# download do navegador.
+# doc_voronoi/: versiona prototipo_scatter/ e conteudo.txt (codigo/notas
+# proprios), mas nao os PDFs de artigos de referencia soltos na raiz (grandes,
+# nao sao produzidos por este projeto) nem metadados de download do navegador.
 doc_voronoi/*.pdf
 doc_voronoi/*:Zone.Identifier
 
-# artefatos de compilacao do LaTeX (reproduzem via `make` em relatorio_tecnico/)
-doc_voronoi/relatorio_tecnico/*.aux
-doc_voronoi/relatorio_tecnico/capitulos/*.aux
-doc_voronoi/relatorio_tecnico/*.bbl
-doc_voronoi/relatorio_tecnico/*.bcf
-doc_voronoi/relatorio_tecnico/*.blg
-doc_voronoi/relatorio_tecnico/*.out
-doc_voronoi/relatorio_tecnico/*.run.xml
-doc_voronoi/relatorio_tecnico/*.toc
-doc_voronoi/relatorio_tecnico/*.lof
-doc_voronoi/relatorio_tecnico/*.lot
+# relatorio_tecnico/: mantido SO' LOCAL a pedido do usuario (2026-09-09) --
+# nao versionar (nem os .tex/.bib/Makefile fonte, nem o PDF gerado).
+doc_voronoi/relatorio_tecnico/
 
 convert_mpas/convert_mpas
 convert_mpas/src/*.o
