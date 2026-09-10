@@ -139,11 +139,13 @@ bug colateral corrigido no caminho.
 
 ## 3. Reclassificação de gelo marinho
 
-**Status**: ✅ implementado; validado negativamente (zero regressão no
-caso SouthAmerica). Validação positiva (uma célula de verdade
-reclassificada) continua dependente do item 5 (segundo caso, alta
-latitude) — sem gelo marinho real disponível, não dá pra exercitar essa
-metade do critério de aceite ainda.
+**Status**: ✅ implementado; validado negativamente em dois casos
+independentes (zero regressão, ver item 5). Validação positiva (uma
+célula de verdade reclassificada) continua em aberto — nenhuma das
+rodadas globais disponíveis neste ambiente cobre uma região com
+`SEAICE>0` dentro do recorte `SouthAmerica` (ver achados do item 5);
+precisa de `static.nc` de uma região em alta latitude, ainda não
+disponível.
 
 **Por quê**: o código de referência reclassifica células de água muito
 fria (`config_tsk_seaice_threshold`) como gelo marinho, ajustando em
@@ -228,24 +230,61 @@ validar o novo caminho de verdade.
 
 ## 5. Validação multi-caso (outra malha/resolução/estação)
 
-**Status**: 🔲 não iniciado.
+**Status**: ⚠️ parcialmente concluído (2026-09-10). Validado com um
+segundo caso (mesma malha, data/estado atmosférico independente); a
+generalização para uma malha/resolução realmente diferente continua em
+aberto por falta de dado disponível neste ambiente (ver "Achados"
+abaixo).
 
-**Por quê**: toda a validação numérica e funcional até aqui usa uma
+**Por quê**: toda a validação numérica e funcional até aqui usava uma
 única malha (`SouthAmerica`, ~60km), um único caso (24h a partir de
 2026-01-01_00), `nVertLevels=55`. Os 61 níveis de pressão fixa
-intermediários são estatísticos de um único caso e nunca testados em
+intermediários eram estatísticos de um único caso e nunca testados em
 perfil vertical muito diferente. A generalização estrutural (namelist
-lido em runtime) já remove a barreira técnica — falta só exercitar.
+lido em runtime) já removia a barreira técnica — faltava só exercitar.
 
-**Onde mexe**: nenhum código novo, necessariamente — é rodar o pipeline
-já existente numa segunda malha/data e comparar contra uma segunda
-referência real, se existir.
+**Onde mexeu**: nenhum código novo — rodou-se o pipeline já existente
+(`extract_fields` → `hinterp_native` → `gen_init_native`) fim-a-fim numa
+segunda inicialização, usando a mesma malha-alvo (`SouthAmerica.static.nc`)
+mas uma rodada global-fonte totalmente independente:
+`/lustre/.../SOURCE/dataout/PREV_MPAS/2026011500/history.2026-01-15_00.00.00.nc`
+(mesma malha global uniforme de origem, `nCells=163842`, ~60km — mas 14
+dias depois do caso original, estado sinótico completamente distinto).
+Buscou-se também uma malha-alvo com resolução/região diferente
+(`SouthAmerica` é a única disponível neste ambiente — nenhum outro
+`*.static.nc` foi encontrado nos mounts `/mnt/JACI`/`/mnt/dados2`) e uma
+rodada global com gelo marinho real (todas as 35 rodadas disponíveis em
+`PREV_MPAS/` são sobre o mesmo domínio global, mas o recorte
+`SouthAmerica` fica inteiramente em baixa latitude — nenhuma célula tem
+`SEAICE>0` em nenhuma data testada).
 
-**Critério de aceite**: pipeline roda sem erro fim-a-fim num segundo
-caso; erro campo-a-campo contra uma referência real (se disponível)
-fica na mesma ordem de grandeza do caso SouthAmerica.
+**Critério de aceite**: pipeline roda sem erro fim-a-fim no segundo caso
+— **confirmado** (Fases 1+2+3+4+6 completas, sem crash). Sanidade física
+— **confirmada**: zero `NaN` em todos os 135 campos numéricos, `zgrid`
+estritamente monotônico nas 17064 células (938.520 pares nível-célula
+verificados), faixas de `theta`/`rho`/`w`/`u`/`qv`/`tslb`/`smois`/`sh2o`/
+`tmn` fisicamente plausíveis e da mesma ordem de grandeza do caso
+original. Confirmado que é de fato um estado atmosférico independente
+(não uma cópia acidental): diferença média de $3{,}4$K em `theta`
+(máx. $42$K), $478$Pa em `surface_pressure` (máx. $3599$Pa), $5{,}8$m/s
+em `u` (máx. $103$m/s) frente ao caso original. Sem referência real
+(`init.nc` de produção) pra essa segunda data, não dá pra validar
+campo-a-campo bit a bit — só sanidade/plausibilidade.
 
-**Achados / decisões**: —
+**Achados / decisões**: este ambiente de trabalho só tem uma malha-alvo
+(`SouthAmerica`) e uma única região global de baixa latitude disponível
+localmente — não foi possível testar uma malha/resolução genuinamente
+diferente (ex.: 15--25km, ou uma região em alta latitude) nem exercitar
+a metade positiva do item 3 (célula real de gelo marinho sendo
+corretamente reclassificada), porque nenhuma das 35 rodadas globais
+disponíveis em `PREV_MPAS/` cobre uma região com `SEAICE>0` dentro do
+recorte `SouthAmerica`. Este item permanece parcialmente aberto: a
+generalização estrutural (código não depende de malha/resolução
+fixa, já demonstrado pelo `namelist.init_atmosphere` lido em runtime)
+está validada por construção, mas a demonstração empírica com uma malha
+realmente diferente depende de dado externo (`static.nc` de outra
+região/resolução + `history.nc` global cobrindo latitude com gelo
+marinho) que precisa ser providenciado pelo usuário quando disponível.
 
 ---
 
@@ -398,8 +437,17 @@ exigir recompilação.
 
 ## Ordem de ataque
 
-1 (✅ feito) → 2 (✅ feito) → 3 (✅ feito, validação negativa; positiva
-depende do item 5) → 6 (✅ feito) → 8 (✅ feito) → 5 (próximo — único
-jeito de validar a metade positiva do item 3, além de fechar a lacuna em
-si) → 4/7 (só viram relevantes com uma fonte/config diferente da
-testada).
+1 (✅ feito) → 2 (✅ feito) → 3 (✅ feito, validação negativa em dois
+casos; positiva bloqueada por falta de dado) → 6 (✅ feito) → 8
+(✅ feito) → 5 (⚠️ parcial — sanidade em segundo caso confirmada;
+malha/resolução realmente diferente e gelo marinho real seguem
+bloqueados por falta de dado externo) → 4/7 (só viram relevantes com uma
+fonte/config diferente da testada).
+
+**Bloqueio comum aos itens 3 (metade positiva) e 5 (parte restante)**:
+ambos precisam do mesmo dado externo ainda não disponível neste
+ambiente — um `static.nc` de uma malha/região em alta latitude (ideal:
+resolução também diferente de ~60km, pra testar generalização de
+resolução ao mesmo tempo) mais um `history.nc` global cobrindo essa
+região. Sem isso, os dois itens ficam no estado atual até o usuário
+providenciar o dado.
