@@ -6,10 +6,10 @@
 # (producao, malha global x1.163842) para a malha SouthAmerica.
 #
 # Pre-requisitos (produzidos pelas etapas anteriores):
-#   - <REGION_NAME>.init.nc (ver scripts/03_roda_init_atmosphere.bash)
-#   - <REGION_NAME>.graph.info.part.<NP_RUN> (ver scripts/01_recorta_regiao.bash)
+#   - <REGION_NAME>.init.nc (ver core/pipeline/legacy/03_roda_init_atmosphere.bash)
+#   - <REGION_NAME>.graph.info.part.<NP_RUN> (ver core/pipeline/01_recorta_regiao.bash)
 #   - lbc.*.nc cobrindo START_TIME..START_TIME+RUN_DURATION
-#     (ver scripts/04_gera_lbc.bash) -- OBRIGATORIO para malha regional,
+#     (ver core/pipeline/legacy/04_gera_lbc.bash) -- OBRIGATORIO para malha regional,
 #     ver nota abaixo.
 #
 # Investigado antes de escrever este script (docs/regional_mpas_edi.pdf,
@@ -50,14 +50,14 @@ ENV_ALL="${ENV_ALL:-/lustre/projetos/satdas/diego_workdir/env_wrf_wps.bash}"
 # --- Templates de namelist/streams (mesmos usados em produção) ---
 FILE_BASE_ATM="${FILE_BASE_ATM:-/lustre/projetos/satdas/diego_workdir/SOURCE/FILE_BASE/core_atmosphere}"
 
-# --- Malha regional recortada (ver scripts/01_recorta_regiao.bash) ---
+# --- Malha regional recortada (ver core/pipeline/01_recorta_regiao.bash) ---
 DIR_MALHA="${DIR_MALHA:-/lustre/projetos/satdas/diego_workdir/SOURCE/ungrib_to_mpas/recortes/SouthAmerica}"
 REGION_NAME="${REGION_NAME:-SouthAmerica}"
 
-# --- init.nc de entrada (ver scripts/03_roda_init_atmosphere.bash) ---
+# --- init.nc de entrada (ver core/pipeline/legacy/03_roda_init_atmosphere.bash) ---
 INIT_FILE="${INIT_FILE:-${DIR_MALHA}/init_run/${REGION_NAME}.init.nc}"
 
-# --- Arquivos de condição de contorno lateral (ver scripts/04_gera_lbc.bash) ---
+# --- Arquivos de condição de contorno lateral (ver core/pipeline/legacy/04_gera_lbc.bash) ---
 DIR_LBC="${DIR_LBC:-${DIR_MALHA}/lbc_run}"
 # Precisa bater EXATAMENTE com LBC_INTERVAL_HHMMSS usado em 04_gera_lbc.bash,
 # senao o modelo trava com "Failed to process LBC data at next time after ...".

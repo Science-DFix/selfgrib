@@ -33,7 +33,7 @@ blend_bdy_terrain` (mpas-bundle-3.0.2, ~linha 6791) — confirmado
 também na seção 8.2 do `mpas_atmosphere_users_guide_8.3.0.pdf`.
 `gen_vertical_grid.F90` (driver standalone de depuração da Fase 2,
 **não usado na orquestração de produção** — confirmado em
-`scripts/voronoi/04_gera_init_native.bash`, que chama só
+`core/pipeline/native/04_gera_init_native.bash`, que chama só
 `gen_init_native`) ficou **sem o fix**, decisão deliberada por não
 fazer parte do caminho validado; registrar aqui caso algum dia volte a
 ser usado standalone.

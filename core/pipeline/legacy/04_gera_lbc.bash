@@ -23,9 +23,9 @@
 #     template real ja instalado no cluster).
 #
 # Pré-requisitos (produzidos pelas etapas anteriores):
-#   - <REGION_NAME>.init.nc (ver scripts/03_roda_init_atmosphere.bash)
+#   - <REGION_NAME>.init.nc (ver core/pipeline/legacy/03_roda_init_atmosphere.bash)
 #   - <PREFIXO>:AAAA-MM-DD_HH em DIR_MET, cobrindo todo o periodo LBC_START..LBC_STOP
-#     (ver scripts/02_roda_pipeline_meteorologico.bash)
+#     (ver core/pipeline/legacy/02_roda_pipeline_meteorologico.bash)
 #
 # Variáveis de entrada/saída são todas configuráveis por ambiente (env vars).
 # ==============================================================================
@@ -39,14 +39,14 @@ ENV_ALL="${ENV_ALL:-/lustre/projetos/satdas/diego_workdir/env_wrf_wps.bash}"
 # --- Templates de namelist/streams (mesmos usados em produção para o init) ---
 FILE_BASE_INI="${FILE_BASE_INI:-/lustre/projetos/satdas/diego_workdir/SOURCE/FILE_BASE}"
 
-# --- Malha regional recortada (ver scripts/01_recorta_regiao.bash) ---
+# --- Malha regional recortada (ver core/pipeline/01_recorta_regiao.bash) ---
 DIR_MALHA="${DIR_MALHA:-/lustre/projetos/satdas/diego_workdir/SOURCE/ungrib_to_mpas/recortes/SouthAmerica}"
 REGION_NAME="${REGION_NAME:-SouthAmerica}"
 
 # --- init.nc ja gerado (fornece a malha vertical para o LBC) ---
 INIT_FILE="${INIT_FILE:-${DIR_MALHA}/init_run/${REGION_NAME}.init.nc}"
 
-# --- Arquivos meteorológicos intermediários (ver scripts/02_roda_pipeline_meteorologico.bash) ---
+# --- Arquivos meteorológicos intermediários (ver core/pipeline/legacy/02_roda_pipeline_meteorologico.bash) ---
 DIR_MET="${DIR_MET:-${DIR_MALHA}/met_intermediate}"
 PREFIXO="${PREFIXO:-MPAS}"
 

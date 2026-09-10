@@ -6,7 +6,7 @@
 #
 # NÃO interpola nada novo do WPS_GEOG — apenas recorta os campos estáticos
 # já existentes no static.nc de entrada para a subregião definida no .pts.
-# Ver MPAS-Limited-Area/HOWTO_RECORTE.md para o racional completo.
+# Ver core/vendor/limited_area/HOWTO_RECORTE.md para o racional completo.
 #
 # Variáveis de entrada/saída são todas configuráveis por ambiente (env vars).
 # Os defaults abaixo apontam para o clone do selfgrib no Jaci — sobrescreva
@@ -18,7 +18,7 @@ set -euo pipefail
 
 # --- Localização do clone do selfgrib (para os defaults abaixo) ---
 DIR_SELFGRIB="${DIR_SELFGRIB:-/lustre/projetos/satdas/diego_workdir/SOURCE/ungrib_to_mpas/selfgrib}"
-DIR_LIMITED_AREA="${DIR_LIMITED_AREA:-${DIR_SELFGRIB}/MPAS-Limited-Area}"
+DIR_LIMITED_AREA="${DIR_LIMITED_AREA:-${DIR_SELFGRIB}/core/vendor/limited_area}"
 PYTHON_BIN="${PYTHON_BIN:-python3}"
 
 # --- Entrada ---

@@ -7,7 +7,7 @@
 # init_atmosphere_model pra essa etapa.
 #
 # Pre-requisitos:
-#   - <REGION_NAME>.static.nc (scripts/01_recorta_regiao.bash)
+#   - <REGION_NAME>.static.nc (core/pipeline/01_recorta_regiao.bash)
 #   - namelist.init_atmosphere do init_run (config_start_time = INIT_TIME)
 #   - native_target_<INIT_TIME>.nc (voronoi/03_interp_horizontal_nativa.bash)
 #
@@ -18,7 +18,7 @@
 set -euo pipefail
 
 DIR_VORONOI="${DIR_VORONOI:-/lustre/projetos/satdas/diego_workdir/SOURCE/voronoi_to_voronoi}"
-DIR_MPAS2INTERMEDIATE="${DIR_MPAS2INTERMEDIATE:-${DIR_VORONOI}/mpas2intermediate}"
+DIR_MPAS2INTERMEDIATE="${DIR_MPAS2INTERMEDIATE:-${DIR_VORONOI}/core/src}"
 
 REGION_NAME="${REGION_NAME:-SouthAmerica}"
 DIR_MALHA="${DIR_MALHA:-/lustre/projetos/satdas/diego_workdir/SOURCE/ungrib_to_mpas/recortes/${REGION_NAME}}"
@@ -33,7 +33,7 @@ INIT_TIME="${INIT_TIME:-2026-01-01_00}"   # deve bater com config_start_time do 
 WORK_DIR="${WORK_DIR:-${DIR_MALHA}/init_run_native}"
 INIT_FILE="${INIT_FILE:-${WORK_DIR}/${REGION_NAME}.init.nc}"
 
-[ -x "${DIR_MPAS2INTERMEDIATE}/gen_init_native" ] || { echo "ERRO: gen_init_native não encontrado/executável em $DIR_MPAS2INTERMEDIATE (compile mpas2intermediate primeiro, 'make')"; exit 1; }
+[ -x "${DIR_MPAS2INTERMEDIATE}/gen_init_native" ] || { echo "ERRO: gen_init_native não encontrado/executável em $DIR_MPAS2INTERMEDIATE (compile core/src primeiro, 'make')"; exit 1; }
 [ -f "$STATIC_REGIONAL" ] || { echo "ERRO: malha-alvo não encontrada: $STATIC_REGIONAL"; exit 1; }
 [ -f "$NAMELIST_INIT" ]   || { echo "ERRO: namelist não encontrado: $NAMELIST_INIT"; exit 1; }
 command -v ncks >/dev/null || { echo "ERRO: ncks (NCO) não encontrado no PATH -- 'module load nco' ou equivalente"; exit 1; }

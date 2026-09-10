@@ -1,12 +1,12 @@
 # artefatos de compilacao (reproduzem via `make`)
-mpas2intermediate/obj/
-mpas2intermediate/extract_fields
-mpas2intermediate/pack_intermediate
-mpas2intermediate/test_interp
-mpas2intermediate/hinterp_native
-mpas2intermediate/gen_vertical_grid
-mpas2intermediate/gen_init_native
-mpas2intermediate/gen_lbc_native
+core/src/obj/
+core/src/extract_fields
+core/src/pack_intermediate
+core/src/test_interp
+core/src/hinterp_native
+core/src/gen_vertical_grid
+core/src/gen_init_native
+core/src/gen_lbc_native
 
 # doc_voronoi/: versiona prototipo_scatter/ e conteudo.txt (codigo/notas
 # proprios), mas nao os PDFs de artigos de referencia soltos na raiz (grandes,
@@ -18,13 +18,13 @@ doc_voronoi/*:Zone.Identifier
 # nao versionar (nem os .tex/.bib/Makefile fonte, nem o PDF gerado).
 doc_voronoi/relatorio_tecnico/
 
-convert_mpas/convert_mpas
-convert_mpas/src/*.o
-convert_mpas/src/*.mod
+core/vendor/convert_mpas/convert_mpas
+core/vendor/convert_mpas/src/*.o
+core/vendor/convert_mpas/src/*.mod
 
 # saidas de teste (grandes, regeneraveis)
-MPAS-Limited-Area/*.nc
-MPAS-Limited-Area/*.graph.info
+core/vendor/limited_area/*.nc
+core/vendor/limited_area/*.graph.info
 *.grib2
 *.grb
 

@@ -103,6 +103,6 @@ gpmetis -minconn -contig -niter=200 SouthAmerica.graph.info N
 O `SouthAmerica.static.nc` (ou `.init.nc`/`.region.nc`) gerado aqui é o
 arquivo que vai no `streams.init_atmosphere` (stream `input`) do
 `init_atmosphere_model`, junto com os arquivos meteorológicos intermediários
-gerados pela nossa pipeline em `../mpas2intermediate/` (ver o `README.md` lá
+gerados pela nossa pipeline em `../../src/` (ver o `README.md` lá
 para o processo completo: extração de dados globais → preparação dos
 arquivos → execução do MPAS-A).

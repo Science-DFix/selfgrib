@@ -4,21 +4,21 @@
 # rodada global do MPAS-A que cobre os tempos necessarios (init + cada tempo
 # de fronteira lateral), gerando um extracted_<tempo>.nc por tempo (ainda na
 # malha nativa GLOBAL, niveis de pressao fixos -- ver
-# mpas2intermediate/src/pressure_levels.F90).
+# core/src/pressure_levels.F90).
 #
 # Equivalente ao primeiro sub-passo do run_pipeline.sh da rota de producao
-# (scripts/02_roda_pipeline_meteorologico.bash), mas SEM convert_mpas/grade
+# (core/pipeline/legacy/02_roda_pipeline_meteorologico.bash), mas SEM convert_mpas/grade
 # lat-lon -- essa rota faz a interpolacao horizontal depois, direto na malha
 # nativa (03_interp_horizontal_nativa.bash).
 #
-# Pre-requisitos: nenhum (so' precisa da rodada global + mpas2intermediate
+# Pre-requisitos: nenhum (so' precisa da rodada global + core/src
 # ja compilado).
 # ==============================================================================
 
 set -euo pipefail
 
 DIR_VORONOI="${DIR_VORONOI:-/lustre/projetos/satdas/diego_workdir/SOURCE/voronoi_to_voronoi}"
-DIR_MPAS2INTERMEDIATE="${DIR_MPAS2INTERMEDIATE:-${DIR_VORONOI}/mpas2intermediate}"
+DIR_MPAS2INTERMEDIATE="${DIR_MPAS2INTERMEDIATE:-${DIR_VORONOI}/core/src}"
 
 DIR_RODADA_GLOBAL="${DIR_RODADA_GLOBAL:-/lustre/projetos/satdas/diego_workdir/SOURCE/dataout/PREV_MPAS/2026010100}"
 
@@ -30,7 +30,7 @@ DIR_OUT="${DIR_OUT:-${DIR_MALHA}/native_intermediate}"
 # cobrir o tempo inicial (init.nc) + todos os tempos de fronteira (lbc.*.nc).
 TIMES="${TIMES:-2026-01-01_00 2026-01-01_06 2026-01-01_12 2026-01-01_18 2026-01-02_00}"
 
-[ -x "${DIR_MPAS2INTERMEDIATE}/extract_fields" ] || { echo "ERRO: extract_fields não encontrado/executável em $DIR_MPAS2INTERMEDIATE (compile mpas2intermediate primeiro, 'make')"; exit 1; }
+[ -x "${DIR_MPAS2INTERMEDIATE}/extract_fields" ] || { echo "ERRO: extract_fields não encontrado/executável em $DIR_MPAS2INTERMEDIATE (compile core/src primeiro, 'make')"; exit 1; }
 [ -d "$DIR_RODADA_GLOBAL" ] || { echo "ERRO: DIR_RODADA_GLOBAL não encontrado: $DIR_RODADA_GLOBAL"; exit 1; }
 
 mkdir -p "$DIR_OUT"

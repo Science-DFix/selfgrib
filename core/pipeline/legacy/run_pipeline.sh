@@ -19,10 +19,15 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CORE_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
-# Caminho do binario convert_mpas (compilado em ../convert_mpas, ver README).
+# extract_fields/pack_intermediate ficam em core/src (compilado por
+# core/Makefile). Sobrescreva via env var DIR_SRC se estiver em outro lugar.
+DIR_SRC="${DIR_SRC:-${CORE_DIR}/src}"
+
+# Caminho do binario convert_mpas (compilado em core/vendor/convert_mpas, ver README).
 # Sobrescreva via env var CONVERT_MPAS_BIN se estiver em outro lugar.
-CONVERT_MPAS_BIN="${CONVERT_MPAS_BIN:-${SCRIPT_DIR}/../convert_mpas/convert_mpas}"
+CONVERT_MPAS_BIN="${CONVERT_MPAS_BIN:-${CORE_DIR}/vendor/convert_mpas/convert_mpas}"
 
 SRC_DIR="$1"
 OUT_DIR="$2"
@@ -71,7 +76,7 @@ for f in "$SRC_DIR"/history.*.nc; do
     echo "[RUN ] $hdate -- fonte: $base"
     t0=$(date +%s)
 
-    if ! "$SCRIPT_DIR/extract_fields" "$f" "extracted_${hdate}.nc" > "log_extract_${hdate}.log" 2>&1; then
+    if ! "$DIR_SRC/extract_fields" "$f" "extracted_${hdate}.nc" > "log_extract_${hdate}.log" 2>&1; then
         echo "[FAIL] $hdate -- extract_fields (veja log_extract_${hdate}.log)"
         n_fail=$((n_fail+1))
         continue
@@ -84,7 +89,7 @@ for f in "$SRC_DIR"/history.*.nc; do
     fi
     mv -f latlon.nc "latlon_${hdate}.nc"
 
-    if ! "$SCRIPT_DIR/pack_intermediate" "latlon_${hdate}.nc" "${hdate}:00:00" "$PREFIX" > "log_pack_${hdate}.log" 2>&1; then
+    if ! "$DIR_SRC/pack_intermediate" "latlon_${hdate}.nc" "${hdate}:00:00" "$PREFIX" > "log_pack_${hdate}.log" 2>&1; then
         echo "[FAIL] $hdate -- pack_intermediate (veja log_pack_${hdate}.log)"
         n_fail=$((n_fail+1))
         continue

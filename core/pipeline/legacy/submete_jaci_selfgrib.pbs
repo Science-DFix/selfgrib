@@ -26,6 +26,6 @@ export GFORTRAN_CONVERT_UNIT='big_endian:101-200'
 export NP=${NP:-32}
 
 # --- Diretório do experimento (filesystem Lustre) ---
-cd /lustre/projetos/satdas/diego_workdir/SOURCE/ungrib_to_mpas/selfgrib/scripts || exit 1
+cd /lustre/projetos/satdas/diego_workdir/SOURCE/ungrib_to_mpas/selfgrib/core/pipeline/legacy || exit 1
 
 ./master_run_selfgrib.bash

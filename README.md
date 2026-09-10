@@ -14,7 +14,7 @@ O ponto de partida é o **selfgrib**: um "ungrib" alternativo para o
 MPAS-A que lê a saída nativa (`history.nc`) de uma rodada global do
 próprio modelo e usa isso como fonte de dado meteorológico, eliminando a
 dependência de GRIB externo. Essa parte está descrita em detalhe em
-[`mpas2intermediate/README.md`](mpas2intermediate/README.md) e não é o
+[`core/src/README.md`](core/src/README.md) e não é o
 foco deste README — vale a pena ler se você quer entender a motivação
 original do projeto, mas a rota que ele descreve (via formato WPS e
 grade lat-lon) **não é o que esta branch usa por padrão**.
@@ -102,7 +102,7 @@ crescimento físico acompanhando o ciclo diurno CAPE-cima/CIN-baixo.*
 
 Essas figuras vêm diretamente da saída (`diag.*.nc`) da mesma previsão
 usada para validar a rota nativa — ver
-[`scripts/voronoi/README.md`](scripts/voronoi/README.md) para a
+[`core/pipeline/native/README.md`](core/pipeline/native/README.md) para a
 orquestração completa e o relatório técnico local
 (`doc_voronoi/relatorio_tecnico/`) para a validação numérica campo a campo.
 
@@ -128,14 +128,18 @@ abordagem (`doc_voronoi/prototipo_scatter/`).
 ## Estrutura do repositório
 
 ```
-mpas2intermediate/      -- pipeline Fortran (rota antiga via WPS + rota nova nativa)
-  src/gen_vertical_grid.F90, gen_init_native.F90, gen_lbc_native.F90, hinterp_native.F90, ...
-convert_mpas/            -- ferramenta da NCAR, dependência (motor de pesos baricêntricos)
-MPAS-Limited-Area/       -- ferramenta da NCAR para recortar regiões da malha global
-scripts/
-  01_recorta_regiao.bash            -- reusado por ambas as rotas
-  02_*.bash .. 05_*.bash             -- rota antiga (via WPS), ver mpas2intermediate/README.md
-  voronoi/                          -- rota nova (esta branch), ver scripts/voronoi/README.md
+core/                     -- ferramenta unica: codigo proprio + dependencias + orquestracao
+  Makefile                          -- builda vendor/ e depois src/, em ordem
+  src/                               -- pipeline Fortran proprio (rota antiga via WPS + rota nova nativa)
+    gen_vertical_grid.F90, gen_init_native.F90, gen_lbc_native.F90, hinterp_native.F90, ...
+    README.md                        -- arquitetura completa do pipeline Fortran
+  vendor/                            -- dependencias vendorizadas da NCAR, nao escritas por este projeto
+    convert_mpas/                     -- motor de pesos baricentricos (usado pelas duas rotas)
+    limited_area/                     -- recorte de regioes da malha global
+  pipeline/                          -- orquestracao bash das duas rotas
+    01_recorta_regiao.bash            -- reusado por ambas as rotas
+    native/                           -- rota recomendada/validada (esta branch), ver pipeline/native/README.md
+    legacy/                           -- rota antiga via WPS, mantida como referencia/comparacao
 doc_voronoi/
   relatorio_tecnico/                -- documento científico completo (LaTeX, apenas local, fora do git)
   *.pdf                             -- artigos de referência
@@ -146,9 +150,11 @@ docs/                    -- referências técnicas gerais do MPAS-A (manuais, no
 ## Compilação
 
 ```bash
-cd convert_mpas && make FC=gfortran && cd ..
-cd mpas2intermediate && make && cd ..
+cd core && make
 ```
+
+(builda primeiro `vendor/convert_mpas`, depois `src/` — equivalente a
+rodar os dois `make` manualmente na ordem certa.)
 
 Isso gera, entre outros, os binários usados pela rota nativa:
 `hinterp_native`, `gen_vertical_grid`, `gen_init_native`,
@@ -160,7 +166,7 @@ Isso gera, entre outros, os binários usados pela rota nativa:
 ## Como rodar (rota nativa)
 
 Ordem de execução completa, do recorte da malha até a previsão real —
-ver [`scripts/voronoi/README.md`](scripts/voronoi/README.md) para a
+ver [`core/pipeline/native/README.md`](core/pipeline/native/README.md) para a
 lista de variáveis de ambiente configuráveis e o detalhe de cada passo:
 
 ```bash
@@ -169,12 +175,12 @@ export DIR_RODADA_GLOBAL=/caminho/para/uma/rodada/global/ja/concluida
 export REGION_NAME=SouthAmerica   # ou outra malha ja recortada
 export TIMES="2026-01-01_00 2026-01-01_06 2026-01-01_12 2026-01-01_18 2026-01-02_00"
 
-bash scripts/01_recorta_regiao.bash                    # 1. recorta a malha (reusado da rota antiga)
-bash scripts/voronoi/02_extrai_first_guess.bash        # 2. extract_fields, malha global
-bash scripts/voronoi/03_interp_horizontal_nativa.bash  # 3. interpolação baricêntrica malha->malha
-bash scripts/voronoi/04_gera_init_native.bash          # 4. init.nc completo (grade vertical + hidrostático + superfície)
-bash scripts/voronoi/05_gera_lbc_native.bash           # 5. lbc.*.nc, um por tempo de fronteira
-bash scripts/voronoi/06_roda_previsao_native.bash      # 6. roda o mpas_atmosphere real a partir desses arquivos
+bash core/pipeline/01_recorta_regiao.bash                    # 1. recorta a malha (reusado da rota antiga)
+bash core/pipeline/native/02_extrai_first_guess.bash        # 2. extract_fields, malha global
+bash core/pipeline/native/03_interp_horizontal_nativa.bash  # 3. interpolação baricêntrica malha->malha
+bash core/pipeline/native/04_gera_init_native.bash          # 4. init.nc completo (grade vertical + hidrostático + superfície)
+bash core/pipeline/native/05_gera_lbc_native.bash           # 5. lbc.*.nc, um por tempo de fronteira
+bash core/pipeline/native/06_roda_previsao_native.bash      # 6. roda o mpas_atmosphere real a partir desses arquivos
 ```
 
 Cada script é idempotente (pula o que já existe) e configurável via
@@ -184,12 +190,13 @@ partir de `2026-01-01_00`) documentado no relatório técnico.
 
 ## A rota original (via WPS)
 
-Ainda presente neste repositório, sem alteração, como referência e
-fallback: [`scripts/01_recorta_regiao.bash`](scripts/01_recorta_regiao.bash)
-até [`scripts/05_roda_previsao.bash`](scripts/05_roda_previsao.bash),
-documentada em detalhe (arquitetura, bugs reais encontrados e
-corrigidos, galeria de resultados) em
-[`mpas2intermediate/README.md`](mpas2intermediate/README.md). As duas
+Ainda presente neste repositório, sem alteração de lógica (só de
+localização, nesta reorganização), como referência e fallback:
+[`core/pipeline/01_recorta_regiao.bash`](core/pipeline/01_recorta_regiao.bash)
+mais [`core/pipeline/legacy/`](core/pipeline/legacy/) (`02_*.bash` até
+`05_*.bash`), documentada em detalhe (arquitetura, bugs reais
+encontrados e corrigidos, galeria de resultados) em
+[`core/src/README.md`](core/src/README.md). As duas
 rotas compartilham o mesmo passo de recorte de malha
 (`01_recorta_regiao.bash`) e podem ser comparadas lado a lado a partir
 do mesmo caso de estudo — é exatamente essa comparação que valida a

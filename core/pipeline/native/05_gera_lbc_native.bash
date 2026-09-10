@@ -18,7 +18,7 @@
 set -euo pipefail
 
 DIR_VORONOI="${DIR_VORONOI:-/lustre/projetos/satdas/diego_workdir/SOURCE/voronoi_to_voronoi}"
-DIR_MPAS2INTERMEDIATE="${DIR_MPAS2INTERMEDIATE:-${DIR_VORONOI}/mpas2intermediate}"
+DIR_MPAS2INTERMEDIATE="${DIR_MPAS2INTERMEDIATE:-${DIR_VORONOI}/core/src}"
 
 REGION_NAME="${REGION_NAME:-SouthAmerica}"
 DIR_MALHA="${DIR_MALHA:-/lustre/projetos/satdas/diego_workdir/SOURCE/ungrib_to_mpas/recortes/${REGION_NAME}}"
@@ -36,7 +36,7 @@ WORK_DIR="${WORK_DIR:-${DIR_MALHA}/lbc_run_native}"
 # tempo 0, ver README).
 TIMES="${TIMES:-2026-01-01_00 2026-01-01_06 2026-01-01_12 2026-01-01_18 2026-01-02_00}"
 
-[ -x "${DIR_MPAS2INTERMEDIATE}/gen_lbc_native" ] || { echo "ERRO: gen_lbc_native não encontrado/executável em $DIR_MPAS2INTERMEDIATE (compile mpas2intermediate primeiro, 'make')"; exit 1; }
+[ -x "${DIR_MPAS2INTERMEDIATE}/gen_lbc_native" ] || { echo "ERRO: gen_lbc_native não encontrado/executável em $DIR_MPAS2INTERMEDIATE (compile core/src primeiro, 'make')"; exit 1; }
 [ -f "$INIT_FILE" ]    || { echo "ERRO: init.nc não encontrado: $INIT_FILE (rode voronoi/04_gera_init_native.bash primeiro)"; exit 1; }
 [ -f "$NAMELIST_LBC" ] || { echo "ERRO: namelist não encontrado: $NAMELIST_LBC"; exit 1; }
 

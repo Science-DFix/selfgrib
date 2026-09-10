@@ -5,16 +5,16 @@
 # Voronoi (voronoi/04_gera_init_native.bash + voronoi/05_gera_lbc_native.bash),
 # em vez dos gerados pelo init_atmosphere_model/WPS.
 #
-# E' uma copia quase identica de scripts/05_roda_previsao.bash (mesmos
+# E' uma copia quase identica de core/pipeline/legacy/05_roda_previsao.bash (mesmos
 # namelist/streams/executavel/tabelas de fisica) -- SO' os caminhos de
 # entrada mudam (INIT_FILE/DIR_LBC apontam pros diretorios *_native).
-# Ver scripts/05_roda_previsao.bash para o racional completo de cada
+# Ver core/pipeline/legacy/05_roda_previsao.bash para o racional completo de cada
 # opcao de namelist/stream (invariant/da_state removidos, config_apply_lbcs
 # obrigatorio, etc.) -- nao duplicado aqui.
 #
 # Pre-requisitos:
 #   - <REGION_NAME>.init.nc nativo (voronoi/04_gera_init_native.bash)
-#   - <REGION_NAME>.graph.info.part.<NP_RUN> (scripts/01_recorta_regiao.bash)
+#   - <REGION_NAME>.graph.info.part.<NP_RUN> (core/pipeline/01_recorta_regiao.bash)
 #   - lbc.*.nc nativos cobrindo START_TIME..START_TIME+RUN_DURATION
 #     (voronoi/05_gera_lbc_native.bash)
 #
@@ -50,7 +50,7 @@ fi
 # --- Templates de namelist/streams (mesmos usados em produção) ---
 FILE_BASE_ATM="${FILE_BASE_ATM:-/lustre/projetos/satdas/diego_workdir/SOURCE/FILE_BASE/core_atmosphere}"
 
-# --- Malha regional recortada (ver scripts/01_recorta_regiao.bash) ---
+# --- Malha regional recortada (ver core/pipeline/01_recorta_regiao.bash) ---
 DIR_MALHA="${DIR_MALHA:-/lustre/projetos/satdas/diego_workdir/SOURCE/ungrib_to_mpas/recortes/SouthAmerica}"
 REGION_NAME="${REGION_NAME:-SouthAmerica}"
 
@@ -123,7 +123,7 @@ done
 ln -sf "${DIR_PHYSICS}/RRTMG_SW_DATA" ./RRTMG_SW_DATA
 ln -sf "${DIR_PHYSICS}/RRTMG_LW_DATA" ./RRTMG_LW_DATA
 
-# --- namelist.atmosphere (mesmas opções de scripts/05_roda_previsao.bash) ---
+# --- namelist.atmosphere (mesmas opções de core/pipeline/legacy/05_roda_previsao.bash) ---
 cp -f "${FILE_BASE_ATM}/namelist.atmosphere" .
 sed -i -E "s|config_start_time\s*=\s*'[^']*'|config_start_time = '${START_TIME}'|"              namelist.atmosphere
 sed -i -E "s|config_run_duration\s*=\s*'[^']*'|config_run_duration = '${RUN_DURATION}'|"        namelist.atmosphere

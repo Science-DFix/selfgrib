@@ -8,7 +8,7 @@ NF_FLIBS  := $(shell nf-config --flibs)
 # sejam lidos corretamente por mpas_init_atm_read_met.F e por rd_intermediate.exe.
 FFLAGS = -O2 -g -fbacktrace -ffree-line-length-none -fconvert=big-endian -frecord-marker=4 $(NF_FFLAGS)
 
-SRC = src
+SRC = .
 OBJDIR = obj
 
 COMMON_OBJS = $(OBJDIR)/mpas_kind_types.o \
@@ -20,11 +20,11 @@ COMMON_OBJS = $(OBJDIR)/mpas_kind_types.o \
 # doc_voronoi/prototipo_scatter/ e o plano de implementacao) reusa, sem
 # modificar, os modulos de remapeamento baricentrico ja compilados do
 # convert_mpas -- que precisa estar compilado ANTES deste Makefile rodar
-# (ver ../convert_mpas/README.md, "make FC=gfortran"). Sem as flags
+# (ver ../vendor/convert_mpas/README.md, "make FC=gfortran"). Sem as flags
 # -fconvert=big-endian/-frecord-marker=4 (so' fazem sentido pro binario
 # WPS de write_intermediate.F90/pack_intermediate.F90): hinterp_native so'
 # faz E/S via NetCDF.
-CONVERT_MPAS_SRC = ../convert_mpas/src
+CONVERT_MPAS_SRC = ../vendor/convert_mpas/src
 CONVERT_MPAS_OBJS = $(CONVERT_MPAS_SRC)/copy_atts.o \
                      $(CONVERT_MPAS_SRC)/mpas_mesh.o \
                      $(CONVERT_MPAS_SRC)/target_mesh.o \

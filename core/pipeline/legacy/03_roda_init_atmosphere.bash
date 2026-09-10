@@ -3,19 +3,19 @@
 # 03_roda_init_atmosphere.bash — Roda o init_atmosphere_model para gerar o
 # init.nc de uma malha regional recortada (MPAS-Limited-Area), usando os
 # arquivos meteorológicos intermediários gerados pelo pipeline selfgrib
-# (mpas2intermediate) como fonte, em vez de GFS/ungrib.
+# (core/src) como fonte, em vez de GFS/ungrib.
 #
 # Pré-requisitos (produzidos pelas etapas anteriores):
 #   - <REGION_NAME>.static.nc + <REGION_NAME>.graph.info.part.<NP_RUN>
-#     (ver scripts/01_recorta_regiao.bash)
+#     (ver core/pipeline/01_recorta_regiao.bash)
 #   - <PREFIXO>:AAAA-MM-DD_HH em DIR_MET
-#     (ver scripts/02_roda_pipeline_meteorologico.bash)
+#     (ver core/pipeline/legacy/02_roda_pipeline_meteorologico.bash)
 #
 # Adapta os templates de namelist/streams do init_atmosphere_model:
 #   - config_met_prefix: 'FILE' -> PREFIXO ('MPAS')
 #   - config_nfglevels: 38 (GFS) -> 62 (61 níveis de pressão do selfgrib,
 #     incluindo os 6 níveis de buffer no topo — ver
-#     mpas2intermediate/src/pressure_levels.F90 — + 1 pseudo-nível de
+#     core/src/pressure_levels.F90 — + 1 pseudo-nível de
 #     superfície 200100 Pa — NÃO conta o pseudo-nível 201300/PMSL, que é
 #     um campo 2D isolado. Ver comentário mais abaixo, junto de
 #     N_FGLEVELS, para o detalhe completo)
@@ -42,11 +42,11 @@ ENV_ALL="${ENV_ALL:-/lustre/projetos/satdas/diego_workdir/env_wrf_wps.bash}"
 # --- Templates de namelist/streams (mesmos usados em produção) ---
 FILE_BASE_INI="${FILE_BASE_INI:-/lustre/projetos/satdas/diego_workdir/SOURCE/FILE_BASE}"
 
-# --- Malha regional recortada (ver scripts/01_recorta_regiao.bash) ---
+# --- Malha regional recortada (ver core/pipeline/01_recorta_regiao.bash) ---
 DIR_MALHA="${DIR_MALHA:-/lustre/projetos/satdas/diego_workdir/SOURCE/ungrib_to_mpas/recortes/SouthAmerica}"
 REGION_NAME="${REGION_NAME:-SouthAmerica}"
 
-# --- Arquivos meteorológicos intermediários (ver scripts/02_roda_pipeline_meteorologico.bash) ---
+# --- Arquivos meteorológicos intermediários (ver core/pipeline/legacy/02_roda_pipeline_meteorologico.bash) ---
 DIR_MET="${DIR_MET:-${DIR_MALHA}/met_intermediate}"
 PREFIXO="${PREFIXO:-MPAS}"
 
@@ -69,7 +69,7 @@ NP_RUN="${NP_RUN:-32}"
 #     zf(1,nz)", porque os 55 niveis de pressao originais (mediana de
 #     cada nivel de modelo numa rodada de referencia) nao davam margem no
 #     topo -- ver o comentario completo em
-#     mpas2intermediate/src/pressure_levels.F90. A correcao foi adicionar
+#     core/src/pressure_levels.F90. A correcao foi adicionar
 #     6 niveis de pressao extras no topo (1,2,3,5,7,10 hPa -- os MESMOS
 #     niveis que o `ungrib`/GFS real ja usa em producao acima de 12 hPa,
 #     confirmados lendo um FILE:* real com um parser do formato
@@ -77,7 +77,7 @@ NP_RUN="${NP_RUN:-32}"
 #     config_nfglevels correto agora e 62 (61 niveis de pressao + 1
 #     pseudo-nivel de superficie 200100 Pa).
 #
-#     Isso exige recompilar o mpas2intermediate e REPROCESSAR (regerar)
+#     Isso exige recompilar o core/src e REPROCESSAR (regerar)
 #     todos os arquivos MPAS:* existentes antes de rodar de novo -- a
 #     mudanca em pressure_levels.F90 muda o formato/conteudo desses
 #     arquivos.

@@ -7,14 +7,14 @@
 # intermediaria.
 #
 # Pre-requisitos:
-#   - <REGION_NAME>.static.nc (scripts/01_recorta_regiao.bash)
+#   - <REGION_NAME>.static.nc (core/pipeline/01_recorta_regiao.bash)
 #   - extracted_<tempo>.nc pra cada tempo (voronoi/02_extrai_first_guess.bash)
 # ==============================================================================
 
 set -euo pipefail
 
 DIR_VORONOI="${DIR_VORONOI:-/lustre/projetos/satdas/diego_workdir/SOURCE/voronoi_to_voronoi}"
-DIR_MPAS2INTERMEDIATE="${DIR_MPAS2INTERMEDIATE:-${DIR_VORONOI}/mpas2intermediate}"
+DIR_MPAS2INTERMEDIATE="${DIR_MPAS2INTERMEDIATE:-${DIR_VORONOI}/core/src}"
 
 DIR_RODADA_GLOBAL="${DIR_RODADA_GLOBAL:-/lustre/projetos/satdas/diego_workdir/SOURCE/dataout/PREV_MPAS/2026010100}"
 
@@ -27,8 +27,8 @@ DIR_OUT="${DIR_OUT:-${DIR_MALHA}/native_intermediate}"
 
 TIMES="${TIMES:-2026-01-01_00 2026-01-01_06 2026-01-01_12 2026-01-01_18 2026-01-02_00}"
 
-[ -x "${DIR_MPAS2INTERMEDIATE}/hinterp_native" ] || { echo "ERRO: hinterp_native não encontrado/executável em $DIR_MPAS2INTERMEDIATE (compile mpas2intermediate primeiro, 'make')"; exit 1; }
-[ -f "$STATIC_REGIONAL" ] || { echo "ERRO: malha-alvo não encontrada: $STATIC_REGIONAL (rode scripts/01_recorta_regiao.bash primeiro)"; exit 1; }
+[ -x "${DIR_MPAS2INTERMEDIATE}/hinterp_native" ] || { echo "ERRO: hinterp_native não encontrado/executável em $DIR_MPAS2INTERMEDIATE (compile core/src primeiro, 'make')"; exit 1; }
+[ -f "$STATIC_REGIONAL" ] || { echo "ERRO: malha-alvo não encontrada: $STATIC_REGIONAL (rode core/pipeline/01_recorta_regiao.bash primeiro)"; exit 1; }
 
 mkdir -p "$DIR_OUT"
 

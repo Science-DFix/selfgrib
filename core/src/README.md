@@ -20,7 +20,7 @@ fronteira lateral) — **sem nenhum patch no código-fonte do MPAS-Model**.
 ### 1.1. Compilar esta ferramenta
 
 ```bash
-cd mpas2intermediate
+cd core/src
 make
 ```
 
@@ -131,7 +131,7 @@ só aparece no link, não na execução).
 
 # 2) remapeia horizontalmente para lat-lon (malha nativa -> grade regular)
 #    precisa de um arquivo 'target_domain' no diretorio de trabalho (ver
-#    convert_mpas/README.md) definindo a grade de destino
+#    ../vendor/convert_mpas/README.md) definindo a grade de destino
 cd /dir/de/trabalho/com/target_domain
 /caminho/para/convert_mpas  /caminho/history.2026-01-02_00.00.00.nc  extracted.nc
 # gera latlon.nc
@@ -162,7 +162,7 @@ final, mantendo só o binário final e os logs.
 dê uma margem de alguns graus além da malha de simulação real. O
 `convert_mpas` deixa pontos sem dado (`_FillValue`) nas poucas
 colunas/linhas mais externas da grade de destino (limitação documentada no
-próprio `convert_mpas/README.md`, seção de to-do sobre a busca do triângulo
+próprio `../vendor/convert_mpas/README.md`, seção de to-do sobre a busca do triângulo
 de interpolação) — com margem suficiente, essas falhas de borda ficam fora
 da área que a malha de simulação realmente usa.
 
@@ -196,7 +196,7 @@ equações de cada fase, achados/bugs investigados em detalhe, resultados de
 validação): `doc_voronoi/relatorio_tecnico/` (LaTeX, compile com `make`;
 mantido apenas local, fora do controle de versão). Este README traz só um
 resumo operacional; ver também
-[`scripts/voronoi/README.md`](../scripts/voronoi/README.md) para a
+[`core/pipeline/native/README.md`](../pipeline/native/README.md) para a
 orquestração ponta-a-ponta.
 
 **Status**: pipeline completo (Fases 1-7) implementado e validado em duas
@@ -237,7 +237,7 @@ cp <REGION>.static.nc init_completo.nc && ncks -A computed.nc init_completo.nc
 
 O orquestrador completo (recorte de malha → `init.nc`/`lbc.*.nc` →
 `mpas_atmosphere` real) está em
-[`scripts/voronoi/`](../scripts/voronoi/) — ver o README dessa pasta para
+[`core/pipeline/native/`](../pipeline/native/) — ver o README dessa pasta para
 a ordem de execução e as variáveis de ambiente configuráveis.
 
 O pipeline de produção original (`run_pipeline.sh`, seção 2.2, via WPS)
@@ -432,7 +432,7 @@ netCDF** (não assumidas), exceto onde indicado como "calculado".
   `init_atmosphere_model` já consome sem erro em produção. `N_PLEVELS`
   passou de 55 para 61; `config_nfglevels` correto agora é **62** (61 +
   1 pseudo-nível de superfície). Qualquer mudança em `plevels_hPa` exige
-  recompilar o `mpas2intermediate` **e reprocessar todos os arquivos
+  recompilar o `core/src` **e reprocessar todos os arquivos
   `MPAS:*` já gerados** — o formato/conteúdo deles muda.
 
 - **A correção acima sozinha não resolveu nada — mesmo erro, mesmo com
@@ -514,13 +514,13 @@ netCDF** (não assumidas), exceto onde indicado como "calculado".
   MPAS-Limited-Area adiciona ao redor da elipse nominal, não documentada
   no `.pts`) vai de -60.99 a **+31.14** de latitude e de -92.79 a -27.21
   de longitude — vários graus além da grade lat-lon configurada em
-  `scripts/02_roda_pipeline_meteorologico.bash` (lat -60/25, lon -90/-30,
+  `core/pipeline/legacy/02_roda_pipeline_meteorologico.bash` (lat -60/25, lon -90/-30,
   baseada na elipse *nominal*, não na extensão real). 518 das 17064
   células (medido) ficavam fora da grade, sem nenhum dado real do
   `convert_mpas` — exatamente as poucas células que travavam,
   consistentemente, entre execuções.
 
-  **Correção**: `scripts/02_roda_pipeline_meteorologico.bash` agora usa
+  **Correção**: `core/pipeline/legacy/02_roda_pipeline_meteorologico.bash` agora usa
   os limites REAIS medidos (não a elipse nominal) + margem, com
   `NLAT`/`NLON` ajustados para manter a resolução da grade. Qualquer novo
   recorte de malha deve reconferir a extensão real antes de fixar esses
@@ -612,7 +612,7 @@ O(s) arquivo(s) `<PREFIXO>:AAAA-MM-DD_HH` gerados aqui são o
 (`config_init_case=7` para o primeiro tempo → condição inicial;
 `config_init_case=9` para a sequência completa → fronteira lateral, se a
 malha-alvo for regional). A malha-alvo (recorte regional ou global) é
-preparada separadamente — ver `../MPAS-Limited-Area/HOWTO_RECORTE.md`.
+preparada separadamente — ver `../vendor/limited_area/HOWTO_RECORTE.md`.
 
 ---
 
@@ -715,7 +715,7 @@ target_z >= zf(1,nz)`):
    binário intermediário. Resolvido recompilando o `WPS` com o compilador
    certo. **Relevante para nós como item de checklist futuro**, caso o
    erro volte a aparecer depois de alguma mudança de ambiente/compilador:
-   confirmar que `mpas2intermediate` e o `init_atmosphere_model` foram
+   confirmar que `core/src` e o `init_atmosphere_model` foram
    compilados com o mesmo `gfortran` (o Makefile deste projeto já força
    `-fconvert=big-endian -frecord-marker=4`, seção 1.1, exatamente para
    evitar esse tipo de incompatibilidade).

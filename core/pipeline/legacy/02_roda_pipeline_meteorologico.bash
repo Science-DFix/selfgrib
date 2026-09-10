@@ -3,11 +3,11 @@
 # 02_roda_pipeline_meteorologico.bash — Gera os arquivos meteorológicos
 # intermediários (formato WPS) a partir de uma rodada global do MPAS-A já
 # concluída, usando o pipeline selfgrib (extract_fields -> convert_mpas ->
-# pack_intermediate), via mpas2intermediate/run_pipeline.sh.
+# pack_intermediate), via core/pipeline/legacy/run_pipeline.sh.
 #
 # Não gera nada novo por interpolação de GRIB externo — lê os history.*.nc
 # de uma rodada global que já rodou e virou (ela mesma) a fonte de dados.
-# Ver mpas2intermediate/README.md para a arquitetura completa do pipeline.
+# Ver core/src/README.md para a arquitetura completa do pipeline.
 #
 # Variáveis de entrada/saída são todas configuráveis por ambiente (env vars).
 # Os defaults abaixo apontam para o clone do selfgrib e para uma rodada
@@ -19,8 +19,8 @@ set -euo pipefail
 
 # --- Localização do clone do selfgrib e dos utilitários compilados ---
 DIR_SELFGRIB="${DIR_SELFGRIB:-/lustre/projetos/satdas/diego_workdir/SOURCE/ungrib_to_mpas/selfgrib}"
-DIR_MPAS2INTERMEDIATE="${DIR_MPAS2INTERMEDIATE:-${DIR_SELFGRIB}/mpas2intermediate}"
-CONVERT_MPAS_BIN="${CONVERT_MPAS_BIN:-${DIR_SELFGRIB}/convert_mpas/convert_mpas}"
+DIR_MPAS2INTERMEDIATE="${DIR_MPAS2INTERMEDIATE:-${DIR_SELFGRIB}/core/src}"
+CONVERT_MPAS_BIN="${CONVERT_MPAS_BIN:-${DIR_SELFGRIB}/core/vendor/convert_mpas/convert_mpas}"
 
 # --- Entrada: rodada global já concluída (contém history.*.nc) ---
 DIR_RODADA_GLOBAL="${DIR_RODADA_GLOBAL:-/lustre/projetos/satdas/diego_workdir/SOURCE/dataout/PREV_MPAS/2026010100}"
@@ -68,8 +68,8 @@ NLON="${NLON:-288}"
 
 # --- Validações ---
 [ -d "$DIR_RODADA_GLOBAL" ]     || { echo "ERRO: DIR_RODADA_GLOBAL não encontrado: $DIR_RODADA_GLOBAL"; exit 1; }
-[ -x "${DIR_MPAS2INTERMEDIATE}/extract_fields" ]     || { echo "ERRO: extract_fields não encontrado/executável em $DIR_MPAS2INTERMEDIATE (compile mpas2intermediate primeiro)"; exit 1; }
-[ -x "${DIR_MPAS2INTERMEDIATE}/pack_intermediate" ]  || { echo "ERRO: pack_intermediate não encontrado/executável em $DIR_MPAS2INTERMEDIATE (compile mpas2intermediate primeiro)"; exit 1; }
+[ -x "${DIR_MPAS2INTERMEDIATE}/extract_fields" ]     || { echo "ERRO: extract_fields não encontrado/executável em $DIR_MPAS2INTERMEDIATE (compile core/src primeiro)"; exit 1; }
+[ -x "${DIR_MPAS2INTERMEDIATE}/pack_intermediate" ]  || { echo "ERRO: pack_intermediate não encontrado/executável em $DIR_MPAS2INTERMEDIATE (compile core/src primeiro)"; exit 1; }
 [ -x "$CONVERT_MPAS_BIN" ]                           || { echo "ERRO: convert_mpas não encontrado/executável em $CONVERT_MPAS_BIN (compile convert_mpas primeiro)"; exit 1; }
 
 N_HISTORY=$(ls "${DIR_RODADA_GLOBAL}"/history.*.nc 2>/dev/null | wc -l)

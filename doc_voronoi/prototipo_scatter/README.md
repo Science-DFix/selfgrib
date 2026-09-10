@@ -8,7 +8,7 @@ já usada pelo `selfgrib`).
 
 ## O que descobrimos lendo o código
 
-`convert_mpas/README.md` já documentava que o programa faz interpolação
+`core/vendor/convert_mpas/README.md` já documentava que o programa faz interpolação
 **baricêntrica no triângulo da malha dual de Delaunay** para campos de
 célula — exatamente o método descrito em Ha et al. (2017, *MWR*,
 "Ensemble Kalman Filter Data Assimilation for MPAS", o sistema
@@ -66,21 +66,21 @@ produção o round-trip teria um segundo salto (grade lat-lon →
 que dobraria essa perda.
 
 Isso também confirma, de forma independente, a causa raiz da classe de bug
-já documentada em `mpas2intermediate/README.md` §6.1 (grade lat-lon menor
+já documentada em `core/src/README.md` §6.1 (grade lat-lon menor
 que a extensão real da malha): usar pontos dispersos elimina esse bug por
 construção — não existe mais "grade" para a malha regional exceder.
 
 ## Como rodar de novo
 
 Precisa do `convert_mpas` já compilado (`make FC=gfortran` — ver
-`convert_mpas/README.md` e `mpas2intermediate/README.md` §1.3 sobre
+`core/vendor/convert_mpas/README.md` e `core/src/README.md` §1.3 sobre
 `nf-config` apontando pra um compilador inexistente neste ambiente).
 
 ```bash
 FC=gfortran
 FCINCLUDES=$(nf-config --fflags)
 FCLIBS="-L$(nc-config --libdir) $(nf-config --flibs)"
-SRC=../../convert_mpas/src
+SRC=../../core/vendor/convert_mpas/src
 $FC -O2 -I"$SRC" $FCINCLUDES -o proto_scatter proto_scatter.F90 \
     "$SRC/mpas_mesh.o" "$SRC/target_mesh.o" "$SRC/remapper.o" "$SRC/scan_input.o" \
     $FCLIBS
@@ -106,6 +106,6 @@ controlado, que a interpolação baricêntrica escalar no triângulo dual de
 Delaunay é exata nos centros de célula antes de investir na implementação
 completa. O resultado — pipeline com 7 fases, `init.nc`/`lbc.*.nc`
 validados numericamente e uma previsão de 24h rodando de ponta a ponta no
-`mpas_atmosphere` real — está em `mpas2intermediate/README.md` §2.4,
-`scripts/voronoi/README.md` (orquestração) e no relatório técnico
+`mpas_atmosphere` real — está em `core/src/README.md` §2.4,
+`core/pipeline/native/README.md` (orquestração) e no relatório técnico
 completo em `doc_voronoi/relatorio_tecnico/` (local, fora do git).
