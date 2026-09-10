@@ -91,21 +91,21 @@ Requer um `test_mesh.nc` com a variável `test_smooth(Time, nCells)`
 adicionada (não versionado aqui, é gerado ad-hoc a partir de qualquer
 `*.static.nc` real).
 
-## Próximo passo (decisão em aberto)
+## Decisão tomada e implementada
 
-Duas linhas de escopo pra transformar isso em algo usável na pipeline do
-`selfgrib`, ainda não decididas:
+Das duas linhas de escopo cogitadas neste protótipo, foi escolhida e
+implementada por inteiro a opção **"Completa"**: pular o formato
+WPS/`config_init_case` inteiramente e escrever `init.nc`/`lbc.*.nc`
+diretamente (interpolação horizontal nativa + grade vertical + balanço
+hidrostático + campos de superfície, tudo reimplementado a partir do
+código-fonte real do MPAS-Model) — pipeline "de verdade" ao estilo
+MPAS-DART/JEDI.
 
-- **Mínimo**: expor esse modo scatter como opção de linha de comando no
-  `convert_mpas` (ou um novo pequeno driver), alimentado com
-  `latCell`/`lonCell` da malha regional real (ex.: `SouthAmerica.static.nc`),
-  eliminando o passo de grade lat-lon do `run_pipeline.sh`. Ainda precisa
-  decidir como o resultado chega no `init_atmosphere_model` (o formato
-  binário WPS intermediário exige uma grade estruturada — não aceita
-  pontos dispersos), então provavelmente ainda envolve *algum* tipo de
-  grade final, só que construída a partir da malha real (não da elipse
-  nominal).
-- **Completo**: pular o formato WPS/`config_init_case` inteiramente,
-  escrevendo `init.nc`/`lbc.*.nc` diretamente (interpolação horizontal
-  nativa + vertical direto pro `zgrid` real da malha regional) — pipeline
-  "de verdade" ao estilo MPAS-DART/JEDI, bem mais código.
+Esse protótipo (`proto_scatter.F90`) foi o que validou, num caso mínimo e
+controlado, que a interpolação baricêntrica escalar no triângulo dual de
+Delaunay é exata nos centros de célula antes de investir na implementação
+completa. O resultado — pipeline com 7 fases, `init.nc`/`lbc.*.nc`
+validados numericamente e uma previsão de 24h rodando de ponta a ponta no
+`mpas_atmosphere` real — está em `mpas2intermediate/README.md` §2.4,
+`scripts/voronoi/README.md` (orquestração) e no relatório técnico
+completo em `doc_voronoi/relatorio_tecnico/` (local, fora do git).

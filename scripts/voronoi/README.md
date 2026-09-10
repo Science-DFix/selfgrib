@@ -1,11 +1,12 @@
 # Pipeline de interpolação nativa Voronoi — `init.nc`/`lbc.*.nc` sem WPS
 
-Rota alternativa/experimental (branch `feature/interpolacao-nativa-voronoi`)
-à `scripts/0{1..5}_*.bash` (produção, validada). Não substitui a rota de
-produção — coexiste com ela para comparação. Ver
-`mpas2intermediate/README.md` §2.4 e o plano de implementação completo em
-`/home/dvar/.claude/plans/cheerful-knitting-platypus.md` (achados,
-fórmulas, números de validação, o que ainda não foi testado).
+Rota alternativa (branch `feature/interpolacao-nativa-voronoi`) à
+`scripts/0{1..5}_*.bash` (produção, via WPS). Não substitui a rota de
+produção — coexiste com ela para comparação lado a lado. Documentação
+completa (fundamentação teórica, equações de cada fase, achados/bugs
+investigados, resultados de validação numérica e funcional): ver
+`mpas2intermediate/README.md` §2.4 e o relatório técnico-científico em
+`doc_voronoi/relatorio_tecnico/` (mantido apenas local, fora do git).
 
 ## Ordem de execução
 
@@ -56,16 +57,47 @@ bash scripts/voronoi/05_gera_lbc_native.bash     # todos os tempos de $TIMES
 
 ## Status (2026-09-09)
 
-**Rodado ponta-a-ponta no Jaci de verdade (passos 1-5)** — tudo OK, rápido
-(segundos por passo, Lustre local). `init.nc`: 136/135 variáveis (135 reais
-+ 1 extra inofensiva), validado campo-a-campo contra o `init.nc` real —
-bate exato/quase-exato em tudo. `lbc.*.nc`: auto-consistência exata
-(diff=0 contra o próprio `init.nc` no mesmo tempo) E validação consistente
-contra os 5 `lbc.*.nc` reais de produção — erro médio pequeno e estável
-nos 5 tempos (`u`~0.05-0.09 m/s, `theta`~0.05-0.11K, `rho`~0.006,
-`w`~0.004). Único problema real conhecido: bug confirmado na própria
-referência (`lbc_qv` constante em todos os níveis, não é nosso).
+**Pipeline completo (passos 1-6) rodado ponta-a-ponta no Jaci de verdade.**
 
-**Próximo passo — passo 6 (Fase 7)**: rodar a previsão de verdade
-(`mpas_atmosphere`) a partir desses arquivos e comparar contra a rodada
-de referência já documentada no README principal. Ainda não executado.
+- **Passos 1-5** (`init.nc`/`lbc.*.nc`): rápido (segundos por passo, Lustre
+  local). `init.nc`: 135 variáveis, validado campo-a-campo contra o
+  `init.nc` real — bate exato/quase-exato em tudo. `lbc.*.nc`:
+  auto-consistência exata (diff=0 contra o próprio `init.nc` no mesmo
+  tempo) E validação consistente contra os 5 `lbc.*.nc` reais de produção
+  — erro médio pequeno e estável nos 5 tempos (`u`~0.05-0.09 m/s,
+  `theta`~0.05-0.11K, `rho`~0.006, `w`~0.004). Único problema conhecido é
+  da própria referência, não desta pipeline (`lbc_qv` constante em todos
+  os níveis).
+- **Passo 6** (`mpas_atmosphere` real): executado com sucesso — previsão
+  de 24h completa (240 timesteps), sem erros, a partir exclusivamente dos
+  arquivos gerados pelos passos 1-5 (nenhum `init.nc`/`lbc.*.nc` de
+  produção usado como entrada). Divergência frente à rota de referência
+  (via WPS) cresce de forma suave e limitada ao longo da integração,
+  consistente com duas trajetórias vizinhas de um sistema caótico — não
+  um artefato de implementação.
+
+Bugs reais encontrados e corrigidos durante o desenvolvimento e a
+execução (detalhados no relatório técnico, `doc_voronoi/relatorio_tecnico/`):
+divergência de ~2km na grade vertical (`config_hybrid_coordinate`),
+indexação de aresta de borda em `ru`, dois bugs em `gen_lbc_native.F90`
+(ordem de dimensão NetCDF e alocação de `zb`/`zb3`), `xtime` faltando no
+`init.nc` e com lixo de memória no `lbc.*.nc` (derrubava os 32 ranks MPI).
+
+## O que ainda falta (limitações conhecidas)
+
+Documentado em detalhe no capítulo de discussão do relatório técnico:
+
+- `config_blend_bdy_terrain` não implementado — deixa um resíduo de
+  ~171m concentrado no anel de células de fronteira.
+- Campos de solo (`tslb`/`smois`) copiados diretamente célula-a-célula —
+  válido só quando origem e destino usam o mesmo esquema de superfície
+  (Noah); sem reamostragem/conversão de esquema.
+- Gelo marinho e `config_use_spechumd=.false.` não implementados.
+- Validado em um único par malha/caso (`SouthAmerica`, ~60km,
+  `nVertLevels=55`, 24h a partir de `2026-01-01_00`) — a leitura de
+  `namelist.init_atmosphere` real generaliza a rota estruturalmente para
+  qualquer malha/experimento MPAS-A→MPAS-A, mas isso ainda não foi
+  exercitado em outro caso.
+- A fonte precisa ser especificamente um `history.nc` de uma rodada
+  MPAS-A (não um GRIB ou saída de outro modelo global) — `extract_fields`
+  espera os nomes/convenções desse formato nativo.

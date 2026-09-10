@@ -193,9 +193,9 @@ vertical/interpolação/balanço hidrostático/campos de superfície.
 
 📄 **Documentação técnico-científica completa** (fundamentação teórica,
 equações de cada fase, achados/bugs investigados em detalhe, resultados de
-validação): [`doc_voronoi/relatorio_tecnico/`](../doc_voronoi/relatorio_tecnico/)
-(LaTeX, compile com `make` ou leia o `main.pdf` já gerado). Este README
-traz só um resumo operacional; ver também
+validação): `doc_voronoi/relatorio_tecnico/` (LaTeX, compile com `make`;
+mantido apenas local, fora do controle de versão). Este README traz só um
+resumo operacional; ver também
 [`scripts/voronoi/README.md`](../scripts/voronoi/README.md) para a
 orquestração ponta-a-ponta.
 
