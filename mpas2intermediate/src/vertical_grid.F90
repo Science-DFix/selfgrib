@@ -79,6 +79,7 @@ module vertical_grid
                                       dvEdge, dcEdge, ter_raw, &
                                       config_ztop, config_nsmterrain, config_nsm, config_dzmin, &
                                       config_hybrid_coordinate, config_hybrid_top_z, &
+                                      config_smooth_surfaces, &
                                       config_interface_projection, &
                                       zgrid, zz, zxu, rdzw, dzu, rdzu, fzm, fzp, cf1, cf2, cf3, dss, &
                                       ter_smoothed)
@@ -94,6 +95,17 @@ module vertical_grid
         real (kind=RKIND), intent(in) :: config_ztop, config_dzmin, config_hybrid_top_z
         integer, intent(in) :: config_nsmterrain, config_nsm
         logical, intent(in) :: config_hybrid_coordinate
+        ! Item 6 do plano de fidelidade (doc_voronoi/PLANO_FIDELIDADE.md):
+        ! liga/desliga a suavizacao iterativa de hx por nivel abaixo.
+        ! Achado 2026-09-10 confirmando no codigo real
+        ! (mpas_init_atm_cases.F, ~linha 3217-3300): quando .false., o
+        ! ramo "else" NAO substitui por outra logica -- so' faz logging,
+        ! deixando hx(k,:) igual ao terreno ja suavizado pela 4a ordem em
+        ! TODOS os niveis (valor ja atribuido antes desta subrotina
+        ! entrar no laco por nivel, ver bloco de suavizacao de terreno
+        ! acima). Por isso o ramo .false. aqui nao precisa reatribuir
+        ! nada -- so' pular o laco de suavizacao por nivel.
+        logical, intent(in) :: config_smooth_surfaces
         character (len=*), intent(in) :: config_interface_projection
 
         real (kind=RKIND), dimension(nVertLevels+1,nCells), intent(out) :: zgrid
@@ -274,6 +286,7 @@ module vertical_grid
             write(0,'(A)') ' level, smoothing steps, smoothing factor, smallest fractional dz'
         end if
 
+        if (config_smooth_surfaces) then
         do k=2,kz-1
             hx(k,:) = hx(k-1,:)
             zw_sp = real(zw(k), SPKIND)
@@ -335,6 +348,14 @@ module vertical_grid
         do k=kz,nz
             hx(k,:) = 0.0_SPKIND
         end do
+        end if
+        ! config_smooth_surfaces=.false.: nada a fazer aqui -- hx(k,:)
+        ! ja' vale ter(iCell) (terreno com suavizacao de 4a ordem) em
+        ! TODOS os niveis desde o bloco anterior, e o codigo de
+        ! referencia nao reatribui nada no ramo .false. (so' faz
+        ! logging). zw(k)>=zh (onde ah(k)=0 e hx deixaria de importar)
+        ! nao precisa do zero-out explicito aqui pelo mesmo motivo: com
+        ! ah(k)=0, zgrid(k,i)=zw(k) independente do valor de hx(k,i).
 
         !
         ! Altura final das interfaces (zgrid), metrica vertical (zz), e

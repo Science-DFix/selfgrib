@@ -251,28 +251,41 @@ fica na mesma ordem de grandeza do caso SouthAmerica.
 
 ## 6. `config_smooth_surfaces` não conectado (achado revisando o manual)
 
-**Status**: 🔲 não iniciado (baixa prioridade, achado 2026-09-09 relendo
-`docs/mpas_atmosphere_users_guide_8.3.0.pdf` a pedido do usuário).
+**Status**: ✅ implementado e validado (2026-09-10, motivado por pedido
+explícito do usuário de manter as duas ramificações `true`/`false` de
+toda flag `config_*` refletindo a dinâmica real do modelo — ver memória
+`feedback_config_flags_both_branches`).
 
 **Por quê**: o manual (namelist `&vertical_grid`) documenta
 `config_smooth_surfaces` (logical, default `true`) como o interruptor
 que liga/desliga a suavização iterativa das superfícies zeta por nível
 (`config_nsm` controla quantas passadas, no máximo). `namelist_config.F90`
-já lê `config_smooth_surfaces` pro tipo de config, mas
-`compute_vertical_grid` nunca recebe esse argumento — a suavização roda
-incondicionalmente sempre que `config_nsm>0`. Só não apareceu na
-validação porque o namelist real usado (`FILE_BASE`) tem
-`config_smooth_surfaces=true` explícito, igual ao default — o caminho
-`.false.` nunca foi exercitado nem bloqueado.
+já lia `config_smooth_surfaces` pro tipo de config, mas
+`compute_vertical_grid` nunca recebia esse argumento — a suavização
+rodava incondicionalmente sempre que `config_nsm>0`.
 
-**Onde mexe**: `vertical_grid.F90` (`compute_vertical_grid`, gatear o
-loop "Suavização iterativa de hx por nível" com um novo argumento
-`config_smooth_surfaces`) + `gen_init_native.F90` (passar
-`cfg % config_smooth_surfaces` na chamada).
+**Onde mexeu**: `vertical_grid.F90` (`compute_vertical_grid`, novo
+argumento `config_smooth_surfaces` envolvendo o laço "Suavização
+iterativa de hx por nível" num `if`) + `gen_init_native.F90`/
+`gen_vertical_grid.F90` (passam `cfg % config_smooth_surfaces`).
+Confirmado no código-fonte real (`mpas_init_atm_cases.F`, ~linha
+3217-3300) que o ramo `.false.` do original **não substitui por outra
+suavização** -- só faz *logging*, deixando `hx(k,:)` igual ao terreno já
+suavizado pela 4ª ordem em todos os níveis (valor já atribuído antes do
+laço por nível). Por isso o ramo `.false.` aqui não precisa reatribuir
+nada, só pular o laço.
 
-**Critério de aceite**: com `config_smooth_surfaces=true` (caso atual),
-resultado idêntico ao atual (regressão zero). Não há caso de teste real
-com `.false.` disponível — like item 4, só importa se aparecer.
+**Critério de aceite**: com `config_smooth_surfaces=true` (caso real
+validado) -- **confirmado**: `zgrid`/`zz`/`theta`/`rho`/`w`/
+`surface_pressure` bit-idênticos ao baseline (regressão zero). Com
+`config_smooth_surfaces=false` (nunca exercitado em produção, sem
+referência real pra comparar) -- rodado como teste de sanidade: sem
+`NaN`, sem inversão/degeneração de camada (espaçamento vertical mínimo
+$\sim$47m, sempre positivo em toda a malha), `zgrid` difere do caso
+suavizado como esperado (máx. $\sim$1140m, nos níveis mais altos, onde
+a suavização por nível mais atua) e os campos hidrostáticos seguem em
+faixa fisicamente plausível. Sem referência real, não dá pra confirmar
+bit a bit -- mas não há sinal de bug.
 
 **Achados / decisões**: revisão do manual (seção 8.1) também confirmou
 que `config_sst_update`/`surface.nc` (atualização periódica de SST/gelo
