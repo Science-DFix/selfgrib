@@ -40,7 +40,7 @@ program gen_vertical_grid
 
     integer, dimension(:), allocatable :: nEdgesOnCell
     integer, dimension(:,:), allocatable :: cellsOnCell, edgesOnCell, cellsOnEdge
-    real (kind=RKIND), dimension(:), allocatable :: dvEdge, dcEdge, ter
+    real (kind=RKIND), dimension(:), allocatable :: dvEdge, dcEdge, ter, ter_smoothed
 
     real (kind=RKIND), dimension(:,:), allocatable :: zgrid
     real (kind=RKIND), dimension(:,:), allocatable :: zz, dss
@@ -125,6 +125,7 @@ program gen_vertical_grid
     allocate(dss(nVertLevels,nCells))
     allocate(zxu(nVertLevels,nEdges))
     allocate(rdzw(nVertLevels), dzu(nVertLevels), rdzu(nVertLevels), fzm(nVertLevels), fzp(nVertLevels))
+    allocate(ter_smoothed(nCells))
 
     write(0,*) 'Calculando grade vertical nativa (config_tc_vertical_grid)'
     call compute_vertical_grid(nCells, nEdges, maxEdges, nVertLevels, &
@@ -133,7 +134,8 @@ program gen_vertical_grid
                                 cfg % config_ztop, cfg % config_nsmterrain, cfg % config_nsm, cfg % config_dzmin, &
                                 config_hybrid_coordinate, config_hybrid_top_z, &
                                 cfg % config_interface_projection, &
-                                zgrid, zz, zxu, rdzw, dzu, rdzu, fzm, fzp, cf1, cf2, cf3, dss)
+                                zgrid, zz, zxu, rdzw, dzu, rdzu, fzm, fzp, cf1, cf2, cf3, dss, &
+                                ter_smoothed)
 
     write(0,*) 'Escrevendo '''//trim(output_filename)//''''
     stat = nf90_create(output_filename, NF90_CLOBBER, ncid)

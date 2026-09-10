@@ -50,7 +50,7 @@ program gen_init_native
 
     integer, dimension(:), allocatable :: nEdgesOnCell, bdyMaskCell
     integer, dimension(:,:), allocatable :: cellsOnCell, edgesOnCell, cellsOnEdge
-    real (kind=RKIND), dimension(:), allocatable :: dvEdge, dcEdge, ter, areaCell, angleEdge
+    real (kind=RKIND), dimension(:), allocatable :: dvEdge, dcEdge, ter, ter_smoothed, areaCell, angleEdge
     real (kind=RKIND), dimension(:,:,:), allocatable :: deriv_two
 
     real (kind=RKIND), dimension(:,:), allocatable :: zgrid
@@ -82,6 +82,7 @@ program gen_init_native
     real (kind=RKIND), dimension(:), allocatable :: skintemp_out, tmn, snowc, snowh, xland, xice, seaice_out
     real (kind=RKIND), dimension(:), allocatable :: vegfra_out, sfc_albbck_out
     real (kind=RKIND), dimension(:,:), allocatable :: sh2o, dz_soil, dzs_out, zs_out
+    real (kind=RKIND), dimension(:,:), allocatable :: tslb_out, smois_out
     real (kind=RKIND), dimension(:), allocatable :: u_init, v_init, qv_init, h_oml_initial
     real (kind=RKIND), dimension(:,:), allocatable :: t_init, qc, qr
 
@@ -262,6 +263,7 @@ program gen_init_native
     allocate(zb3(nVertLevels+1,2,nEdges))
     allocate(rdzw(nVertLevels), dzu(nVertLevels), rdzu(nVertLevels), fzm(nVertLevels), fzp(nVertLevels))
     allocate(target_z_mid(nVertLevels))
+    allocate(ter_smoothed(nCells))
 
     write(0,*) 'Calculando grade vertical nativa (Fase 2)'
     call compute_vertical_grid(nCells, nEdges, maxEdges, nVertLevels, &
@@ -270,7 +272,8 @@ program gen_init_native
                                 cfg % config_ztop, cfg % config_nsmterrain, cfg % config_nsm, cfg % config_dzmin, &
                                 config_hybrid_coordinate, config_hybrid_top_z, &
                                 cfg % config_interface_projection, &
-                                zgrid, zz, zxu, rdzw, dzu, rdzu, fzm, fzp, cf1, cf2, cf3, dss)
+                                zgrid, zz, zxu, rdzw, dzu, rdzu, fzm, fzp, cf1, cf2, cf3, dss, &
+                                ter_smoothed)
 
     write(0,*) 'Calculando zb/zb3'
     call compute_zb(nCells, nEdges, maxEdges, nVertLevels, &
@@ -420,14 +423,19 @@ program gen_init_native
         xland = 2.0_RKIND
     end where
 
-    ! skintemp corrigido por lapso termico (diferenca de elevacao entre a
-    ! orografia do first-guess, SOILHGT, e o terreno real da malha-alvo).
+    ! skintemp/tmn corrigidos por lapso termico (diferenca de elevacao
+    ! entre a orografia do first-guess, SOILHGT, e o terreno real da
+    ! malha-alvo). Usa ter_smoothed (terreno JA' suavizado por
+    ! compute_vertical_grid), nao ter cru -- achado 2026-09-09 (item 2 do
+    ! plano de fidelidade): o original usa a MESMA variavel de terreno
+    ! (ja' suavizada) em todo lugar, nos usavamos o cru aqui antes de
+    ! ter_smoothed existir (ver nota em vertical_grid.F90).
     allocate(skintemp_out(nCells))
-    skintemp_out = fg_skintemp - 0.0065_RKIND * (ter - fg_soilhgt)
+    skintemp_out = fg_skintemp - 0.0065_RKIND * (ter_smoothed - fg_soilhgt)
 
     allocate(tmn(nCells))
     where (landmask == 1)
-        tmn = soiltemp - 0.0065_RKIND * ter
+        tmn = soiltemp - 0.0065_RKIND * ter_smoothed
     elsewhere
         tmn = skintemp_out
     end where
@@ -441,10 +449,19 @@ program gen_init_native
         end if
     end do
 
-    ! tslb/smois: copia direta do first-guess (mesmo esquema Noah/mesmas
-    ! profundidades na malha global de origem -- ver nota no plano,
-    ! secao Fase 6, sobre a reamostragem vertical do original nao ser
-    ! necessaria aqui).
+    ! tslb/smois: item 2 do plano de fidelidade
+    ! (doc_voronoi/PLANO_FIDELIDADE.md). Antes so' copiava fg_tslb/fg_smois
+    ! direto; agora aplica a MESMA correcao de lapso termico ja' usada em
+    ! skintemp/tmn (acima) ao perfil de solo inteiro (adjust_soil_lapse_rate,
+    ! extraido de adjust_input_soiltemps) e reamostra pras profundidades-
+    ! padrao Noah do alvo (resample_soil_profile, extraido de
+    ! init_soil_layers_depth+properties) -- chamada logo apos zs_out ser
+    ! calculado, abaixo. Com origem/destino usando as mesmas 4
+    ! profundidades-padrao (caso MPAS-A -> MPAS-A validado), a reamostragem
+    ! degenera matematicamente em identidade sobre o perfil JA corrigido
+    ! por lapso -- ou seja, a unica mudanca real de resultado aqui e' a
+    ! correcao de lapso, que antes faltava.
+    call adjust_soil_lapse_rate(nCells, nSoilLevels, landmask, ter_smoothed, fg_soilhgt, fg_tslb)
 
     allocate(snowc(nCells), snowh(nCells))
     where (fg_snow >= 10.0_RKIND)
@@ -502,6 +519,19 @@ program gen_init_native
         dzs_out(:,iCell) = dzs_const
         zs_out(:,iCell)  = zs_const
     end do
+
+    ! Reamostragem do perfil de solo (item 2, continuacao -- ver nota
+    ! acima). dzs_fg_cm_const: profundidades-padrao Noah do FIRST-GUESS,
+    ! em cm -- fixas porque extract_fields.F90 sempre emite
+    ! SM000010/.../ST100200 nessa convencao (10/40/100/200cm cumulativo),
+    ! valida so' quando a fonte tambem e' MPAS-A com o esquema Noah padrao
+    ! (mesma limitacao ja documentada no relatorio tecnico).
+    block
+        real (kind=RKIND), parameter :: dzs_fg_cm_const(nSoilLevels) = (/10.0_RKIND, 30.0_RKIND, 60.0_RKIND, 100.0_RKIND/)
+        allocate(tslb_out(nSoilLevels,nCells), smois_out(nSoilLevels,nCells))
+        call resample_soil_profile(nCells, nSoilLevels, nSoilLevels, dzs_fg_cm_const, &
+                                    fg_tslb, fg_smois, skintemp_out, tmn, zs_out, tslb_out, smois_out)
+    end block
 
     !-----------------------------------------------------------------
     ! 6) Escreve saida
@@ -648,8 +678,8 @@ program gen_init_native
     call putvar2(ncid, 'dz', dz_soil)
     call putvar2(ncid, 'dzs', dzs_out)
     call putvar2(ncid, 'zs', zs_out)
-    call putvar2(ncid, 'smois', fg_smois)
-    call putvar2(ncid, 'tslb', fg_tslb)
+    call putvar2(ncid, 'smois', smois_out)
+    call putvar2(ncid, 'tslb', tslb_out)
     call putvar1(ncid, 'u_init', u_init)
     call putvar1(ncid, 'v_init', v_init)
     call putvar1(ncid, 'qv_init', qv_init)

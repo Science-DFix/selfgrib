@@ -14,6 +14,8 @@ module surface_fields
 
     public :: monthly_interp_to_date
     public :: day_of_year
+    public :: adjust_soil_lapse_rate
+    public :: resample_soil_profile
 
     contains
 
@@ -100,5 +102,129 @@ module surface_fields
         end do
 
     end subroutine monthly_interp_to_date
+
+
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    ! adjust_soil_lapse_rate
+    !
+    ! Item 2 do plano de fidelidade (doc_voronoi/PLANO_FIDELIDADE.md).
+    ! Porta literal do bloco relevante de
+    ! mpas_atmphys_initialize_real.F :: adjust_input_soiltemps
+    ! (mpas-bundle-3.0.2, ~linha 217): corrige o perfil de temperatura de
+    ! solo do first-guess (st_fg, todos os niveis) pela diferenca de
+    ! elevacao entre o terreno real da malha-alvo (ter, ja' misturado na
+    ! fronteira se config_blend_bdy_terrain -- item 1) e o terreno do
+    ! first-guess (soilz_fg == SOILHGT). MESMA formula/constante (lapse
+    ! rate padrao, 6.5 K/km) ja' usada em gen_init_native.F90 pra
+    ! skintemp/tmn -- so' que ali nunca era aplicada ao perfil de solo
+    ! inteiro (fg_tslb era copiado sem correcao). soilz_fg NAO e' o mesmo
+    ! automaticamente igual a' soilhgt usado no skintemp: sao a mesma
+    ! variavel fisica (SOILHGT), mantida separada aqui so' por clareza de
+    ! nome/uso.
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    subroutine adjust_soil_lapse_rate(nCells, nFGSoilLevels, landmask, ter, soilz_fg, st_fg)
+
+        implicit none
+
+        integer, intent(in) :: nCells, nFGSoilLevels
+        integer, dimension(nCells), intent(in) :: landmask
+        real (kind=RKIND), dimension(nCells), intent(in) :: ter, soilz_fg
+        real (kind=RKIND), dimension(nFGSoilLevels,nCells), intent(inout) :: st_fg
+
+        integer :: iCell, ifgSoil
+
+        do iCell = 1, nCells
+            if (landmask(iCell) == 1) then
+                do ifgSoil = 1, nFGSoilLevels
+                    st_fg(ifgSoil,iCell) = st_fg(ifgSoil,iCell) - 0.0065_RKIND * (ter(iCell) - soilz_fg(iCell))
+                end do
+            end if
+        end do
+
+    end subroutine adjust_soil_lapse_rate
+
+
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    ! resample_soil_profile
+    !
+    ! Item 2 do plano de fidelidade. Porta literal de
+    ! mpas_atmphys_initialize_real.F :: init_soil_layers_depth +
+    ! init_soil_layers_properties (mpas-bundle-3.0.2, ~linhas 273-513):
+    ! reamostra o perfil de temperatura/umidade de solo do first-guess
+    ! (profundidades dzs_fg_cm, EM CENTIMETROS -- mesma convencao do
+    ! original) para as profundidades-padrao Noah do alvo (zs, em METROS,
+    ! ponto medio de cada camada), via interpolacao linear por
+    ! profundidade, ancorada em skintemp (z=0) e tmn (z=3m) nas
+    ! extremidades. st_fg deve chegar aqui JA' com o lapse-rate aplicado
+    ! (adjust_soil_lapse_rate, acima).
+    !
+    ! Preserva DELIBERADAMENTE duas excentricidades do original (ver
+    ! mesmo trecho no MPAS-Model, nao sao erros desta porta):
+    !  - sm_input(1) (ancora em z=0, agua) usa sm_fg(2), NAO sm_fg(1);
+    !  - sm_input(nFGSoilLevels+2) (ancora em z=3m) usa
+    !    sm_input(nFGSoilLevels), NAO sm_input(nFGSoilLevels+1) (a ultima
+    !    camada real do first-guess).
+    ! Nenhuma das duas afeta o caso validado (MPAS-A -> MPAS-A, mesmas 4
+    ! profundidades-padrao na origem e no destino): quando dzs_fg_cm ==
+    ! dzs (destino), zs coincide exatamente com os pontos internos de
+    ! zhave, e a interpolacao degenera em identidade (tslb=st_fg,
+    ! smois=sm_fg, campo a campo) SEM nunca usar as ancoras de borda --
+    ! validado numericamente comparando contra a copia direta anterior.
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    subroutine resample_soil_profile(nCells, nFGSoilLevels, nSoilLevels, dzs_fg_cm, &
+                                      st_fg, sm_fg, skintemp, tmn, zs, tslb, smois)
+
+        implicit none
+
+        integer, intent(in) :: nCells, nFGSoilLevels, nSoilLevels
+        real (kind=RKIND), dimension(nFGSoilLevels), intent(in) :: dzs_fg_cm
+        real (kind=RKIND), dimension(nFGSoilLevels,nCells), intent(in) :: st_fg, sm_fg
+        real (kind=RKIND), dimension(nCells), intent(in) :: skintemp, tmn
+        real (kind=RKIND), dimension(nSoilLevels,nCells), intent(in) :: zs
+        real (kind=RKIND), dimension(nSoilLevels,nCells), intent(out) :: tslb, smois
+
+        real (kind=RKIND), dimension(nFGSoilLevels+2) :: zhave, st_input, sm_input
+        integer :: iCell, iSoil, ifgSoil
+        real (kind=RKIND) :: zs_fg_accum
+
+        do iCell = 1, nCells
+
+            zhave(1) = 0.0_RKIND
+            st_input(1) = skintemp(iCell)
+            sm_input(1) = sm_fg(2,iCell)   ! excentricidade do original, ver nota acima
+
+            zs_fg_accum = 0.0_RKIND
+            do ifgSoil = 1, nFGSoilLevels
+                if (ifgSoil == 1) then
+                    zs_fg_accum = 0.5_RKIND * dzs_fg_cm(1)
+                else
+                    zs_fg_accum = zs_fg_accum + 0.5_RKIND*dzs_fg_cm(ifgSoil-1) + 0.5_RKIND*dzs_fg_cm(ifgSoil)
+                end if
+                zhave(ifgSoil+1) = zs_fg_accum / 100.0_RKIND
+                st_input(ifgSoil+1) = st_fg(ifgSoil,iCell)
+                sm_input(ifgSoil+1) = sm_fg(ifgSoil,iCell)
+            end do
+
+            zhave(nFGSoilLevels+2) = 300.0_RKIND / 100.0_RKIND
+            st_input(nFGSoilLevels+2) = tmn(iCell)
+            sm_input(nFGSoilLevels+2) = sm_input(nFGSoilLevels)   ! excentricidade do original, ver nota acima
+
+            do iSoil = 1, nSoilLevels
+                do ifgSoil = 1, nFGSoilLevels+1
+                    if (zs(iSoil,iCell) >= zhave(ifgSoil) .and. zs(iSoil,iCell) <= zhave(ifgSoil+1)) then
+                        tslb(iSoil,iCell) = ( st_input(ifgSoil)   * (zhave(ifgSoil+1)-zs(iSoil,iCell)) &
+                                             + st_input(ifgSoil+1) * (zs(iSoil,iCell)-zhave(ifgSoil)) ) &
+                                            / (zhave(ifgSoil+1)-zhave(ifgSoil))
+                        smois(iSoil,iCell) = ( sm_input(ifgSoil)   * (zhave(ifgSoil+1)-zs(iSoil,iCell)) &
+                                              + sm_input(ifgSoil+1) * (zs(iSoil,iCell)-zhave(ifgSoil)) ) &
+                                             / (zhave(ifgSoil+1)-zhave(ifgSoil))
+                        exit
+                    end if
+                end do
+            end do
+
+        end do
+
+    end subroutine resample_soil_profile
 
 end module surface_fields

@@ -81,7 +81,9 @@ implementação do blend em si.
 
 ## 2. Reamostragem vertical de solo
 
-**Status**: 🔲 não iniciado.
+**Status**: ✅ implementado e validado. Achado um bug pré-existente
+(não introduzido nesta sessão) no caminho, com impacto muito maior que o
+item em si — ver abaixo.
 
 **Por quê**: hoje `tslb`/`smois` são copiados direto célula-a-célula do
 first-guess, sem a interpolação linear por profundidade que o código de
@@ -90,14 +92,48 @@ Noah. Só é seguro porque origem e destino são sempre MPAS-A (mesmo
 esquema/profundidades) — quebra silenciosamente com qualquer fonte que
 use profundidades de solo diferentes.
 
-**Onde mexe**: `surface_fields.F90` (ou novo módulo `soil_resample.F90`).
+**Onde mexeu**: duas subrotinas novas em `surface_fields.F90` —
+`adjust_soil_lapse_rate` (extraída de `adjust_input_soiltemps`) e
+`resample_soil_profile` (extraída de `init_soil_layers_depth` +
+`init_soil_layers_properties`, ambas em
+`mpas_atmphys_initialize_real.F`, mpas-bundle-3.0.2). Preserva
+deliberadamente duas excentricidades do original (`sm_input(1)` usa
+`sm_fg(2)`, não `sm_fg(1)`; âncora de fundo usa `sm_input(nFGSoilLevels)`,
+não `nFGSoilLevels+1`) — nenhuma afeta o caso validado, documentado em
+comentário no código.
 
-**Critério de aceite**: com origem/destino usando as mesmas 4
-profundidades (caso atual), resultado deve ser bit-idêntico à cópia
-direta atual (a interpolação degenera pra identidade quando as
-profundidades batem) — não pode regredir o caso já validado.
+**Achado colateral (o mais importante deste item)**: `compute_vertical_grid`
+suaviza o terreno internamente (4ª ordem, `config_nsmterrain`) mas nunca
+devolvia esse terreno suavizado pro chamador — `ter_raw` é `intent(in)`,
+a suavização rodava só numa cópia local. `gen_init_native.F90` usava
+então o terreno **cru** (só com blend de fronteira do item 1, sem
+suavização) pra corrigir `skintemp`/`tmn` por lapso térmico — diferente
+do original, onde é a mesma variável de terreno (já suavizada) em todo
+lugar. Esse bug já existia **antes desta sessão**, só nunca tinha sido
+percebido porque `tmn`/`skintemp` são campos de impacto visualmente
+pequeno e nunca comparados campo-a-campo em detalhe. Corrigido expondo
+`ter_smoothed` como nova saída de `compute_vertical_grid`
+(`vertical_grid.F90`) e usando-a em vez de `ter` cru em todas as
+correções de lapso térmico.
 
-**Achados / decisões**: —
+**Validação** (mesmo caso SouthAmerica, contra `init_run/SouthAmerica.init.nc`
+real, células de terra):
+
+| Campo | Antes (item 1 só) | Com item 2 (terreno cru, com bug) | Com item 2 (terreno suavizado, corrigido) |
+|---|---|---|---|
+| `tmn` | média 0.307, máx 6.95 | idêntico (bug não tocado ainda) | **média 0.00057, máx 0.32** (~540x melhor) |
+| `skintemp` | média 0.461, máx 7.07 | idêntico | **média 0.306, máx 3.61** (-34%/-49%) |
+| `tslb` | média 0.174, máx 4.79 | média 0.316, máx 6.75 (piorou!) | média 0.174, máx 4.79 (igual/marginal) |
+| `smois` | média 0.017, máx 0.42 | idêntico | idêntico (esperado — sem correção de lapso em umidade) |
+
+`zgrid` e todos os campos atmosféricos (`theta`, `rho`, `w`,
+`surface_pressure`) confirmados bit-idênticos antes/depois — o fix não
+toca a coluna atmosférica, só os diagnósticos de superfície/solo.
+
+**Critério de aceite**: cumprido para `smois` (idêntico) e essencialmente
+para `tslb` (a correção de lapso é a mudança real esperada, não uma
+regressão); superado para `tmn`/`skintemp`, que melhoraram por conta do
+bug colateral corrigido no caminho.
 
 ---
 
@@ -206,6 +242,6 @@ pendência.
 
 ## Ordem de ataque
 
-1 (✅ feito) → 2/3 (decidem se a ferramenta serve além de
-MPAS-A→MPAS-A/baixa latitude) → 5 (mais barato, só esforço de teste) →
-4/6 (só viram relevantes com uma fonte/config diferente da testada).
+1 (✅ feito) → 2 (✅ feito) → 3 (decide se a ferramenta serve em alta
+latitude) → 5 (mais barato, só esforço de teste) → 4/6 (só viram
+relevantes com uma fonte/config diferente da testada).

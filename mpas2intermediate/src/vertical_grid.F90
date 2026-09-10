@@ -80,7 +80,8 @@ module vertical_grid
                                       config_ztop, config_nsmterrain, config_nsm, config_dzmin, &
                                       config_hybrid_coordinate, config_hybrid_top_z, &
                                       config_interface_projection, &
-                                      zgrid, zz, zxu, rdzw, dzu, rdzu, fzm, fzp, cf1, cf2, cf3, dss)
+                                      zgrid, zz, zxu, rdzw, dzu, rdzu, fzm, fzp, cf1, cf2, cf3, dss, &
+                                      ter_smoothed)
 
         implicit none
 
@@ -100,6 +101,17 @@ module vertical_grid
         real (kind=RKIND), dimension(nVertLevels,nEdges), intent(out) :: zxu
         real (kind=RKIND), dimension(nVertLevels), intent(out) :: rdzw, dzu, rdzu, fzm, fzp
         real (kind=RKIND), intent(out) :: cf1, cf2, cf3
+        ! Terreno JA' suavizado (4a ordem, config_nsmterrain passadas) --
+        ! achado 2026-09-09 investigando o item 2 do plano de fidelidade:
+        ! ter_raw (entrada) e' intent(in) e a suavizacao rodava so' numa
+        ! copia local (ter, SPKIND); o chamador nunca recebia o terreno
+        ! suavizado de volta, e usava o cru (so' com blend de fronteira,
+        ! sem suavizacao) pra corrigir skintemp/tslb por lapso termico --
+        ! diferente do original, onde 'ter' e' a MESMA variavel do pool,
+        ! mutada in-place pela suavizacao, entao todo uso posterior (lapso
+        ! termico incluso) ja' ve' o terreno suavizado. Corrigido expondo
+        ! esse valor aqui.
+        real (kind=RKIND), dimension(nCells), intent(out) :: ter_smoothed
 
         integer :: nz, nz1, i, j, k, iCell, iEdge, kz
         real (kind=RKIND) :: zt, dz, als, alt, zetal, zl, zh, dzmin
@@ -136,6 +148,8 @@ module vertical_grid
                                -0.216_SPKIND, ter, hs)
             ter = hs
         end do
+
+        ter_smoothed = real(ter, RKIND)
 
         allocate(hx(nz,nCells))
         do iCell=1,nCells
