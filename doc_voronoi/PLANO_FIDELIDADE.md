@@ -156,7 +156,20 @@ fracionário vs. binário documentada no relatório).
 nenhum campo. Precisa de um segundo caso de teste com gelo marinho real
 para validar de fato (ver item 5).
 
-**Achados / decisões**: —
+**Achados / decisões** (2026-09-10, revisão cruzada com material externo):
+comparado contra o módulo `mpas_init_atm_fg_voronoi.F` do MONAN-ATM
+(Kubota, INPE/CPTEC, 2024 — relatório técnico + código-fonte em
+`doc_paulo_kubota/`, indicado pelo orientador do usuário), que ataca o
+mesmo problema por uma rota nativa Voronoi-para-Voronoi independente
+(embora com arquitetura diferente — ver \S6 da conclusão do relatório
+técnico). **Nem a implementação de referência do próprio MONAN faz a
+reclassificação em cascata** — o módulo deles só aplica
+`xice = clamp(xice, 0, 1)` após a interpolação, sem tocar uso do
+solo/textura/albedo. Isso não torna o item dispensável (a lacuna
+documentada continua real), mas é um dado concreto pra calibrar
+prioridade: nem o time que mantém o modelo operacional brasileiro
+chegou a implementar isso ainda — reforça que fica atrás do item 5
+(validação multi-caso) na ordem de ataque, não à frente.
 
 ---
 
@@ -240,8 +253,50 @@ pendência.
 
 ---
 
+## 7. Robustez de fonte de dado (achados da revisão cruzada com o MONAN)
+
+**Status**: 🔲 não iniciado (baixíssima prioridade — nenhuma delas afeta
+o caso validado, e ambas exigiriam uma fonte de first-guess diferente
+da testada pra sequer serem exercitadas).
+
+**Por quê**: comparando com `mpas_init_atm_fg_voronoi.F` (Kubota,
+MONAN-ATM/INPE, 2024 — ver item 3 acima), dois pontos onde a
+implementação deles é **mais autossuficiente** que a nossa, por
+assumirem um `history.nc` mais "magro" (menos streams de diagnóstico
+habilitados):
+
+- **Derivação de T/p a partir do estado prognóstico bruto**: eles
+  calculam `T`/`p` a partir de `theta_m`/`rho_zz`/`qv` via equação de
+  estado (fórmula aproximada, erro autodocumentado `<0,2K`). Nós lemos
+  `theta`/`pressure` já prontos, direto do `history.nc` (campos
+  diagnósticos que o MPAS já grava) — mais preciso, mas **quebra se um
+  `history.nc` de origem não tiver esses dois campos habilitados no
+  stream**.
+- **Reconstrução de vento a partir de `u_normal`**: eles reconstroem
+  `u_cell`/`v_cell` por mínimos quadrados locais a partir do vento
+  normal nas arestas. Nós lemos `uReconstructZonal/Meridional`, já
+  pronto no `history.nc` — de novo, mais simples pra nós, mas depende
+  desse campo estar no stream.
+
+**Onde mexeria**: `extract_fields.F90` (ambos os fallbacks, condicionais
+à ausência de `theta`/`pressure`/`uReconstructZonal/Meridional` no
+`history.nc` de entrada).
+
+**Critério de aceite**: com o `history.nc` já validado (todos os campos
+diagnósticos presentes, caso atual), resultado idêntico — os fallbacks
+só entrariam em jogo com uma fonte de first-guess diferente.
+
+**Achados / decisões**: registrado aqui só como referência de como
+resolver o problema *se* algum dia aparecer uma fonte MPAS-A sem esses
+streams de diagnóstico habilitados (por exemplo, um `history.nc` de
+produção configurado de forma mais enxuta que o caso testado) — não é
+uma lacuna do caso validado, não implementar preventivamente.
+
+---
+
 ## Ordem de ataque
 
-1 (✅ feito) → 2 (✅ feito) → 3 (decide se a ferramenta serve em alta
-latitude) → 5 (mais barato, só esforço de teste) → 4/6 (só viram
-relevantes com uma fonte/config diferente da testada).
+1 (✅ feito) → 2 (✅ feito) → 5 (mais barato, só esforço de teste) → 3
+(rebaixado após revisão cruzada — nem a referência do MONAN faz isso
+ainda) → 4/6/7 (só viram relevantes com uma fonte/config diferente da
+testada).
