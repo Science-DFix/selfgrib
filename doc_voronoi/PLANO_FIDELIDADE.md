@@ -339,9 +339,67 @@ uma lacuna do caso validado, não implementar preventivamente.
 
 ---
 
+## 8. `config_tc_vertical_grid` — fórmula alternativa da grade vertical (achado revisando o manual)
+
+**Status**: ✅ implementado e validado (2026-09-10, mesma classe do item 6
+— achado próprio, não do plano original, motivado pelo mesmo pedido
+explícito do usuário de manter as duas ramificações `true`/`false` de
+toda flag `config_*` — ver memória `feedback_config_flags_both_branches`).
+
+**Por quê**: `compute_vertical_grid` sempre calculou `zw(k)` (posição dos
+níveis $\zeta$ antes do reajuste sobre o terreno) com a fórmula
+"experimentos de furacão de 2014" (achatamento não-linear que concentra
+níveis perto da superfície), citada no código-fonte real como
+`config_tc_vertical_grid=.true.`. Só que essa é uma flag lógica de
+namelist (`namelist_config.F90` já a lia, com default `.true.`) — o
+código real (`mpas_init_atm_cases.F`, ~linhas 3040-3130) tem uma
+estrutura de três vias: `config_specified_zeta_levels` (fora do escopo
+desta rota, sem uso real conhecido) → `config_tc_vertical_grid=.true.`
+(já implementado) → `else` ("MPAS 2.0 e anterior", fórmula bem mais
+simples, uma lei de potência: $\zeta_w(k) = z_{top}\left(\frac{k-1}{n_z-1}\right)^{1.5}$).
+O ramo `.false.` nunca tinha sido implementado — a fórmula TC2014 era
+aplicada incondicionalmente, mesmo que o namelist real pedisse a outra.
+
+**Onde mexeu**: `vertical_grid.F90` (`compute_vertical_grid`, novo
+argumento `config_tc_vertical_grid` logo após `config_smooth_surfaces`,
+envolvendo o laço de cálculo de `zw(k)` num `if/else`: ramo `.true.`
+mantém a fórmula TC2014 já existente, ramo `.false.` novo com a lei de
+potência simples) + `gen_init_native.F90`/`gen_vertical_grid.F90` (passam
+`cfg % config_tc_vertical_grid` na nova posição do argumento).
+Confirmado por `grep` que as variáveis auxiliares da fórmula TC2014
+(`als`/`alt`/`zetal`/`zl`) só são usadas dentro do próprio ramo
+`.true.`, sem vazamento pro resto da rotina.
+
+**Critério de aceite**: com `config_tc_vertical_grid=true` (caso real
+validado, `namelist.init_atmosphere` do SouthAmerica) — **confirmado**:
+diferença máxima de $4,5\times10^{-13}$ em `theta` e ordens de grandeza
+menores nos demais campos (`qv`, `relhum`, `rho`, `u`, `w`) frente ao
+checkpoint do item 6 — ruído de ponto flutuante (nível de épsilon de
+máquina), não regressão. Com `config_tc_vertical_grid=false` (nunca
+exercitado em produção, sem referência real pra comparar) — rodado como
+teste de sanidade: sem `NaN`, `zgrid` estritamente monotônico em toda a
+malha (938.520 pares nível-célula verificados, zero inversões — mesmo
+resultado no ramo `.true.`), ancorado corretamente no terreno
+($\zeta=0$) e no topo do modelo ($z=30000$m) em ambos os ramos. A
+diferença entre os dois esquemas é fisicamente coerente com o que cada
+fórmula foi desenhada pra fazer: a lei de potência simples (`.false.`)
+distribui os níveis de forma mais uniforme, enquanto a fórmula TC2014
+(`.true.`) concentra níveis perto da superfície (diferença média de
+$\sim$3.400m na média-troposfera, caindo a zero nas duas extremidades).
+
+**Achados / decisões**: nenhum impacto no caso validado, já que o
+namelist real usa `.true.` (o mesmo valor que já estava implicitamente
+hardcoded antes). A implementação do ramo `.false.` deixa a rota pronta
+pra qualquer experimento futuro que opte pela grade vertical clássica do
+MPAS 2.0 (por exemplo, ao reproduzir configurações mais antigas), sem
+exigir recompilação.
+
+---
+
 ## Ordem de ataque
 
 1 (✅ feito) → 2 (✅ feito) → 3 (✅ feito, validação negativa; positiva
-depende do item 5) → 5 (próximo — único jeito de validar a metade
-positiva do item 3, além de fechar a lacuna em si) → 4/6/7 (só viram
-relevantes com uma fonte/config diferente da testada).
+depende do item 5) → 6 (✅ feito) → 8 (✅ feito) → 5 (próximo — único
+jeito de validar a metade positiva do item 3, além de fechar a lacuna em
+si) → 4/7 (só viram relevantes com uma fonte/config diferente da
+testada).

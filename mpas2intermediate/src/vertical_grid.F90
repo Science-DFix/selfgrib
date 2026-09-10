@@ -79,7 +79,7 @@ module vertical_grid
                                       dvEdge, dcEdge, ter_raw, &
                                       config_ztop, config_nsmterrain, config_nsm, config_dzmin, &
                                       config_hybrid_coordinate, config_hybrid_top_z, &
-                                      config_smooth_surfaces, &
+                                      config_smooth_surfaces, config_tc_vertical_grid, &
                                       config_interface_projection, &
                                       zgrid, zz, zxu, rdzw, dzu, rdzu, fzm, fzp, cf1, cf2, cf3, dss, &
                                       ter_smoothed)
@@ -106,6 +106,19 @@ module vertical_grid
         ! acima). Por isso o ramo .false. aqui nao precisa reatribuir
         ! nada -- so' pular o laco de suavizacao por nivel.
         logical, intent(in) :: config_smooth_surfaces
+        ! Nova formula alternativa (achado 2026-09-10, a pedido do
+        ! usuario -- refletir as duas ramificacoes de toda flag config_*,
+        ! nao so' a usada no caso validado). Confirmado no codigo real
+        ! (mpas_init_atm_cases.F, ~linha 3040-3130) que a escolha de
+        ! z_w(k) e' na verdade um if/else-if/else de TRES vias, nao um
+        ! true/false simples: (1) config_specified_zeta_levels (arquivo
+        ! externo de niveis, string nao-vazia -- fora de escopo, sempre
+        ! vazio nos namelists reais deste projeto, ja documentado);
+        ! (2) config_tc_vertical_grid=.true. (formula "2014 TC
+        ! experiments", ja implementada abaixo); (3) senao, a formula
+        ! "MPAS 2.0 e anterior" -- unico ramo que faltava, adicionado
+        ! aqui.
+        logical, intent(in) :: config_tc_vertical_grid
         character (len=*), intent(in) :: config_interface_projection
 
         real (kind=RKIND), dimension(nVertLevels+1,nCells), intent(out) :: zgrid
@@ -169,35 +182,49 @@ module vertical_grid
         end do
 
         !
-        ! zw(k)/ah(k): "Setting up vertical levels as in 2014 TC experiments"
-        ! (config_tc_vertical_grid) -- constantes calibradas para
-        ! nVertLevels=55 (unico caso usado em producao neste projeto).
+        ! zw(k): tres vias possiveis no original (ver nota no argumento
+        ! config_tc_vertical_grid acima); config_specified_zeta_levels
+        ! (arquivo externo) fora de escopo, entao so' duas ramificacoes
+        ! aqui.
         !
         zt = config_ztop
         dz = zt/real(nz1,RKIND)
 
-        if (nVertLevels >= 55) then
-            als   = 0.075_RKIND
-            alt   = 1.70_RKIND
-            zetal = 0.75_RKIND
-        else
-            als   = 0.075_RKIND
-            alt   = 1.23_RKIND
-            zetal = 0.31_RKIND
-        end if
-
-        do k=1,nz
-            zl = 1.0_RKIND - alt*(1.0_RKIND-zetal)
-            if ((real(k-1,RKIND)/real(nz1,RKIND)) < zetal) then
-                zw(k) = ( als*real(k-1,RKIND)/real(nz1,RKIND)                                   &
-                        + (3.0_RKIND*(1.0_RKIND-alt)+2.0_RKIND*(alt-als)*zetal)                 &
-                              *(real(k-1,RKIND)*dz/(zt*zetal))**2                               &
-                        - (2.0_RKIND*(1.0_RKIND-alt) + (alt-als)*zetal)                         &
-                              *(real(k-1,RKIND)*dz/(zt*zetal))**3 ) * zt
+        if (config_tc_vertical_grid) then
+            ! "Setting up vertical levels as in 2014 TC experiments" --
+            ! constantes calibradas para nVertLevels=55 (unico caso usado
+            ! em producao neste projeto).
+            if (nVertLevels >= 55) then
+                als   = 0.075_RKIND
+                alt   = 1.70_RKIND
+                zetal = 0.75_RKIND
             else
-                zw(k) = (zl+alt*(real(k-1,RKIND)/real(nz1,RKIND)-zetal))*zt
+                als   = 0.075_RKIND
+                alt   = 1.23_RKIND
+                zetal = 0.31_RKIND
             end if
-        end do
+
+            do k=1,nz
+                zl = 1.0_RKIND - alt*(1.0_RKIND-zetal)
+                if ((real(k-1,RKIND)/real(nz1,RKIND)) < zetal) then
+                    zw(k) = ( als*real(k-1,RKIND)/real(nz1,RKIND)                                   &
+                            + (3.0_RKIND*(1.0_RKIND-alt)+2.0_RKIND*(alt-als)*zetal)                 &
+                                  *(real(k-1,RKIND)*dz/(zt*zetal))**2                               &
+                            - (2.0_RKIND*(1.0_RKIND-alt) + (alt-als)*zetal)                         &
+                                  *(real(k-1,RKIND)*dz/(zt*zetal))**3 ) * zt
+                else
+                    zw(k) = (zl+alt*(real(k-1,RKIND)/real(nz1,RKIND)-zetal))*zt
+                end if
+            end do
+        else
+            ! "Setting up vertical levels as in MPAS 2.0 and earlier" --
+            ! extracao literal, mpas_init_atm_cases.F ~linha 3121-3129.
+            ! Formula bem mais simples: perfil de potencia pura, sem
+            ! calibracao por nVertLevels.
+            do k=1,nz
+                zw(k) = (real(k-1,RKIND)/real(nz1,RKIND))**1.5_RKIND * zt
+            end do
+        end if
 
         ! ah(k): achado 2026-09-09 (memoria project-vertical-grid-divergence)
         ! -- config_hybrid_coordinate NAO aparece nos namelists reais, mas o

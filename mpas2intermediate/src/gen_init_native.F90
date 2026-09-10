@@ -312,7 +312,7 @@ program gen_init_native
                                 dvEdge, dcEdge, ter, &
                                 cfg % config_ztop, cfg % config_nsmterrain, cfg % config_nsm, cfg % config_dzmin, &
                                 config_hybrid_coordinate, config_hybrid_top_z, &
-                                cfg % config_smooth_surfaces, &
+                                cfg % config_smooth_surfaces, cfg % config_tc_vertical_grid, &
                                 cfg % config_interface_projection, &
                                 zgrid, zz, zxu, rdzw, dzu, rdzu, fzm, fzp, cf1, cf2, cf3, dss, &
                                 ter_smoothed)
