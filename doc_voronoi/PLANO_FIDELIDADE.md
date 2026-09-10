@@ -139,22 +139,54 @@ bug colateral corrigido no caminho.
 
 ## 3. Reclassificação de gelo marinho
 
-**Status**: 🔲 não iniciado.
+**Status**: ✅ implementado; validado negativamente (zero regressão no
+caso SouthAmerica). Validação positiva (uma célula de verdade
+reclassificada) continua dependente do item 5 (segundo caso, alta
+latitude) — sem gelo marinho real disponível, não dá pra exercitar essa
+metade do critério de aceite ainda.
 
 **Por quê**: o código de referência reclassifica células de água muito
 fria (`config_tsk_seaice_threshold`) como gelo marinho, ajustando em
 cascata uso do solo, textura, albedo máximo de neve e perfis de
-solo/temperatura dessas células. Não implementado. Irrelevante no caso
-SouthAmerica (SEAICE=0 em toda a malha, confirmado contra o dado real),
-mas obrigatório antes de qualquer malha regional em alta latitude.
+solo/temperatura dessas células. Irrelevante no caso SouthAmerica
+(SEAICE=0 em toda a malha, confirmado contra o dado real), mas
+obrigatório antes de qualquer malha regional em alta latitude.
 
-**Onde mexe**: `surface_fields.F90` (novo bloco condicional em
-`config_frac_seaice`, já parcialmente tratado — ver correção do limiar
-fracionário vs. binário documentada no relatório).
+**Onde mexeu**: nova subrotina `reclassify_seaice` em
+`surface_fields.F90`, extraída literalmente de duas rotinas em
+`mpas_atmphys_initialize_real.F` (mpas-bundle-3.0.2):
+`physics_init_sst` (~linha 516) e `physics_init_seaice` (~linha 586).
+Chamada em `gen_init_native.F90` logo após a reamostragem de solo do
+item 2 (precisa de `tslb_out`/`smois_out`/`skintemp_out` já prontos —
+mesma ordem do driver real, `init_soil_layers` antes de
+`physics_init_seaice`, confirmada lendo `physics_initialize_real`).
+Passou a ler/escrever três campos que antes eram só de cópia direta do
+`static.nc` (`ivgtyp`, `isltyp`, `snoalb`) e um escalar novo
+(`isice_lu`, default 24). Novo parâmetro de namelist lido:
+`config_tsk_seaice_threshold` (grupo `&physics`, default 100K —
+confirmado ausente do namelist real usado, fica no default).
+
+**Achado real durante a implementação**: `physics_init_sst` (o
+`tsk=SST` sobre oceano aberto + limpeza defensiva de `xice`) só é
+chamada no driver real (`physics_initialize_real`) dentro de
+`if (config_input_sst) then` -- e o namelist real usado neste projeto
+tem `config_input_sst=.false.` (TSM vem do próprio first-guess, não de
+um arquivo auxiliar separado). Implementar esse bloco sem essa condição
+teria forçado `skintemp=SST` em **toda célula de oceano** do caso
+validado (já que `xice<limiar` é verdade em toda a malha) -- um desvio
+real do comportamento de referência, pego só porque o hábito de
+comparar campo a campo contra o `init.nc` real antes de aceitar
+qualquer mudança continua valendo a pena. Corrigido condicionando esse
+bloco a `config_input_sst` (a reclassificação em si,
+`physics_init_seaice`, é chamada incondicionalmente no driver real,
+então essa parte não tem esse problema).
 
 **Critério de aceite**: caso SouthAmerica (sem gelo) não pode mudar
-nenhum campo. Precisa de um segundo caso de teste com gelo marinho real
-para validar de fato (ver item 5).
+nenhum campo -- **confirmado**: `skintemp`/`tmn`/`tslb`/`smois`/`sh2o`
+bit-idênticos ao baseline item 1+2; `ivgtyp`/`isltyp`/`snoalb`
+idênticos ao `static.nc` em todas as 17064 células; `xice`/`seaice`
+seguem zero em toda a malha. Falta um segundo caso de teste com gelo
+marinho real pra validar a metade positiva do critério (ver item 5).
 
 **Achados / decisões** (2026-09-10, revisão cruzada com material externo):
 comparado contra o módulo `mpas_init_atm_fg_voronoi.F` do MONAN-ATM
@@ -296,7 +328,7 @@ uma lacuna do caso validado, não implementar preventivamente.
 
 ## Ordem de ataque
 
-1 (✅ feito) → 2 (✅ feito) → 5 (mais barato, só esforço de teste) → 3
-(rebaixado após revisão cruzada — nem a referência do MONAN faz isso
-ainda) → 4/6/7 (só viram relevantes com uma fonte/config diferente da
-testada).
+1 (✅ feito) → 2 (✅ feito) → 3 (✅ feito, validação negativa; positiva
+depende do item 5) → 5 (próximo — único jeito de validar a metade
+positiva do item 3, além de fechar a lacuna em si) → 4/6/7 (só viram
+relevantes com uma fonte/config diferente da testada).

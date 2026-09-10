@@ -47,6 +47,16 @@ module namelist_config
         logical :: config_input_sst = .false.
         logical :: config_frac_seaice = .true.
 
+        ! Item 3 do plano de fidelidade (reclassificacao de gelo marinho,
+        ! physics_init_seaice). Default confere com Registry.xml do
+        ! core_atmosphere/physics (mpas-bundle-3.0.2): 100.0 K -- alto o
+        ! suficiente pra, na pratica, desativar o ramo de deteccao por
+        ! temperatura de pele a menos que o namelist real defina um valor
+        ! fisicamente sensato (ex. ~271K). Nao aparece no &physics do
+        ! namelist.init_atmosphere real usado no caso validado (grupo
+        ! ausente -- fica no default).
+        real (kind=RKIND) :: config_tsk_seaice_threshold = 100.0_RKIND
+
         ! Derivados de config_start_time (parseados por parse_config_start_time).
         integer :: start_year, start_month, start_day, start_hour, start_minute, start_second
     end type init_atm_config_type
@@ -102,6 +112,9 @@ module namelist_config
         namelist /preproc_stages/ config_static_interp, config_native_gwd_static, config_vertical_grid_nml, &
                                    config_met_interp, config_input_sst, config_frac_seaice
 
+        real (kind=RKIND) :: config_tsk_seaice_threshold
+        namelist /physics/ config_tsk_seaice_threshold
+
         ! Inicializa as variaveis locais com os defaults do tipo (pra caso
         ! o grupo/variavel nao exista no arquivo, o namelist read simplesmente
         ! nao sobrescreve, mantendo o default em vez de deixar indefinido).
@@ -133,6 +146,7 @@ module namelist_config
         config_met_interp = cfg % config_met_interp
         config_input_sst = cfg % config_input_sst
         config_frac_seaice = cfg % config_frac_seaice
+        config_tsk_seaice_threshold = cfg % config_tsk_seaice_threshold
 
         open(newunit=unit_nml, file=trim(filename), status='old', action='read', iostat=ios)
         if (ios /= 0) then
@@ -151,6 +165,8 @@ module namelist_config
         read(unit_nml, nml=interpolation_control, iostat=ios)
         rewind(unit_nml)
         read(unit_nml, nml=preproc_stages, iostat=ios)
+        rewind(unit_nml)
+        read(unit_nml, nml=physics, iostat=ios)
         close(unit_nml)
 
         cfg % config_init_case = config_init_case
@@ -181,6 +197,7 @@ module namelist_config
         cfg % config_met_interp = config_met_interp
         cfg % config_input_sst = config_input_sst
         cfg % config_frac_seaice = config_frac_seaice
+        cfg % config_tsk_seaice_threshold = config_tsk_seaice_threshold
 
         call parse_config_start_time(cfg)
 

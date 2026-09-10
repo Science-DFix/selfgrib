@@ -1,6 +1,8 @@
 ! Fase 6 (campos de superficie/solo do init.nc) do plano de interpolacao
 ! nativa Voronoi. Extraido literalmente de
-! MPAS-Model/src/core_init_atmosphere/mpas_atmphys_initialize_real.F e
+! MPAS-Model/src/core_atmosphere/physics/mpas_atmphys_initialize_real.F
+! (correcao de path 2026-09-10: NAO fica em core_init_atmosphere, fica em
+! core_atmosphere/physics -- comentario original tinha o path errado) e
 ! mpas_atmphys_date_time.F (mpas-bundle-3.0.2, achado em 2026-09-09
 ! buscando tmn/sh2o/vegfra/sfc_albbck em todo o core_init_atmosphere --
 ! NAO ficam em mpas_init_atm_cases.F, ao contrario do que a categorizacao
@@ -16,6 +18,7 @@ module surface_fields
     public :: day_of_year
     public :: adjust_soil_lapse_rate
     public :: resample_soil_profile
+    public :: reclassify_seaice
 
     contains
 
@@ -226,5 +229,117 @@ module surface_fields
         end do
 
     end subroutine resample_soil_profile
+
+
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    ! reclassify_seaice
+    !
+    ! Item 3 do plano de fidelidade (doc_voronoi/PLANO_FIDELIDADE.md).
+    ! Extraido literalmente de duas rotinas em
+    ! mpas_atmphys_initialize_real.F (mpas-bundle-3.0.2):
+    ! physics_init_sst (~linha 516) -- forca temperatura de pele = TSM
+    ! sobre oceano aberto e faz uma limpeza defensiva de xice; e
+    ! physics_init_seaice (~linha 586) -- reclassifica celulas de agua
+    ! muito fria (fracao de gelo acima do limiar OU temperatura de pele
+    ! abaixo de config_tsk_seaice_threshold) como celulas de gelo/terra,
+    ! ajustando em cascata uso do solo, textura de solo, albedo maximo de
+    ! neve, vegetacao, mascara terra/agua dinamica (xland) e o perfil de
+    ! solo (tslb/smois/sh2o).
+    !
+    ! ACHADO 2026-09-10: no driver real (physics_initialize_real, mesmo
+    ! arquivo, ~linha 68), physics_init_sst so' e' chamada dentro de
+    ! "if (config_input_sst) then" -- ou seja, so' quando a TSM/gelo vem
+    ! de um arquivo auxiliar SEPARADO (nao o caso deste projeto: o
+    ! namelist real usa config_input_sst=.false., TSM vem do proprio
+    ! first-guess via extract_fields). physics_init_seaice, por outro
+    ! lado, e' chamada incondicionalmente. Por isso o bloco tsk=SST +
+    ! limpeza defensiva (fisicamente parte de physics_init_sst) e'
+    ! condicionado aqui a config_input_sst -- inclui-lo incondicionalmente
+    ! teria forcado skintemp=SST em toda celula de oceano do caso
+    ! validado, um desvio real do comportamento de referencia (achado ao
+    ! validar contra o init.nc real, ver PLANO_FIDELIDADE.md item 3).
+    !
+    ! Nao mexe em landmask (mascara ESTATICA, inalterada no original --
+    ! so' xland, a mascara DINAMICA usada pela fisica, e' que muda). Os
+    ! valores fixos (isltyp=16, snoalb=0.75, tmn=271.4K, smois=1.0,
+    ! sh2o=0.0) sao constantes do algoritmo de referencia, preservadas
+    ! exatamente -- nao calibradas por este trabalho.
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    subroutine reclassify_seaice(nCells, nSoilLevels, landmask, isice_lu, &
+                                  config_input_sst, xice_threshold, tsk_seaice_threshold, sst, &
+                                  xice, skintemp, tmn, ivgtyp, isltyp, snoalb, &
+                                  vegfra, xland, tslb, smois, sh2o, seaice)
+
+        implicit none
+
+        integer, intent(in) :: nCells, nSoilLevels
+        integer, dimension(nCells), intent(in) :: landmask
+        integer, intent(in) :: isice_lu
+        logical, intent(in) :: config_input_sst
+        real (kind=RKIND), intent(in) :: xice_threshold, tsk_seaice_threshold
+        real (kind=RKIND), dimension(nCells), intent(in) :: sst
+
+        real (kind=RKIND), dimension(nCells), intent(inout) :: xice, skintemp, tmn
+        integer, dimension(nCells), intent(inout) :: ivgtyp, isltyp
+        real (kind=RKIND), dimension(nCells), intent(inout) :: snoalb, vegfra, xland
+        real (kind=RKIND), dimension(nSoilLevels,nCells), intent(inout) :: tslb, smois, sh2o
+        real (kind=RKIND), dimension(nCells), intent(out) :: seaice
+
+        real (kind=RKIND), parameter :: total_depth = 3.0_RKIND  ! 3m, mesma convencao do original
+        integer :: iCell, iSoil
+        real (kind=RKIND) :: mid_point_depth
+
+        ! ---- physics_init_sst (so' roda se config_input_sst=.true.) ----
+        if (config_input_sst) then
+            ! tsk = TSM sobre oceano aberto/pouco gelo:
+            do iCell = 1, nCells
+                if (landmask(iCell) == 0 .and. xice(iCell) < xice_threshold) then
+                    skintemp(iCell) = sst(iCell)
+                end if
+            end do
+
+            ! limpeza defensiva de xice espurio (celula de terra com
+            ! xice>0, ou valor sentinela/lixo >200):
+            do iCell = 1, nCells
+                if ((landmask(iCell) == 1 .and. xice(iCell) > 0.0_RKIND) .or. &
+                     xice(iCell) > 200.0_RKIND) then
+                    xice(iCell) = 0.0_RKIND
+                end if
+            end do
+        end if
+
+        ! ---- physics_init_seaice: reclassificacao em cascata (sempre) ----
+        do iCell = 1, nCells
+            if (xice(iCell) >= xice_threshold .or. &
+               (landmask(iCell) == 0 .and. skintemp(iCell) < tsk_seaice_threshold)) then
+
+                if (landmask(iCell) == 0) tmn(iCell) = 271.4_RKIND
+                ivgtyp(iCell) = isice_lu
+                isltyp(iCell) = 16
+                snoalb(iCell) = 0.75_RKIND
+                vegfra(iCell) = 0.0_RKIND
+                xland(iCell)  = 1.0_RKIND
+
+                do iSoil = 1, nSoilLevels
+                    mid_point_depth = total_depth/real(nSoilLevels,RKIND)/2.0_RKIND &
+                                     + real(iSoil-1,RKIND)*(total_depth/real(nSoilLevels,RKIND))
+                    tslb(iSoil,iCell) = ( (total_depth-mid_point_depth) * skintemp(iCell) &
+                                         + mid_point_depth * tmn(iCell) ) / total_depth
+                    smois(iSoil,iCell) = 1.0_RKIND
+                    sh2o(iSoil,iCell)  = 0.0_RKIND
+                end do
+
+            else if (xice(iCell) < xice_threshold) then
+                xice(iCell) = 0.0_RKIND
+            end if
+        end do
+
+        ! ---- physics_init_seaice: atualizacao final da flag seaice ----
+        do iCell = 1, nCells
+            seaice(iCell) = 0.0_RKIND
+            if (xice(iCell) > 0.0_RKIND) seaice(iCell) = 1.0_RKIND
+        end do
+
+    end subroutine reclassify_seaice
 
 end module surface_fields

@@ -77,6 +77,13 @@ program gen_init_native
     integer, dimension(:), allocatable :: landmask
     real (kind=RKIND), dimension(:), allocatable :: soiltemp
     real (kind=RKIND), dimension(:,:), allocatable :: greenfrac, albedo12m
+    ! Item 3 (reclassificacao de gelo marinho): campos estaticos que ate'
+    ! agora eram sempre de copia direta (static.nc -> init.nc via ncks -A,
+    ! nunca lidos por este programa); passam a ser lidos/escritos aqui
+    ! porque um numero pequeno de celulas pode precisar ser sobrescrito.
+    integer, dimension(:), allocatable :: ivgtyp, isltyp
+    real (kind=RKIND), dimension(:), allocatable :: snoalb
+    integer :: isice_lu
     real (kind=RKIND), dimension(:), allocatable :: fg_skintemp, fg_soilhgt, fg_sst, fg_snow, fg_seaice_raw
     real (kind=RKIND), dimension(:,:), allocatable :: fg_smois, fg_tslb
     real (kind=RKIND), dimension(:), allocatable :: skintemp_out, tmn, snowc, snowh, xland, xice, seaice_out
@@ -205,6 +212,25 @@ program gen_init_native
     allocate(albedo12m(12,nCells)); albedo12m = real(field % array2r, RKIND)
     stat = scan_input_free_field(field)
 
+    ! Item 3: ivgtyp/isltyp/snoalb -- ate' aqui eram so' de copia direta
+    ! (nunca lidos por este programa); agora lidos porque a reclassificacao
+    ! de gelo marinho pode precisar sobrescreve-los pra um subconjunto de
+    ! celulas.
+    stat = scan_input_for_field(handle, 'ivgtyp', field)
+    stat = scan_input_read_field(field)
+    allocate(ivgtyp(nCells)); ivgtyp = field % array1i
+    stat = scan_input_free_field(field)
+
+    stat = scan_input_for_field(handle, 'isltyp', field)
+    stat = scan_input_read_field(field)
+    allocate(isltyp(nCells)); isltyp = field % array1i
+    stat = scan_input_free_field(field)
+
+    stat = scan_input_for_field(handle, 'snoalb', field)
+    stat = scan_input_read_field(field)
+    allocate(snoalb(nCells)); snoalb = real(field % array1r, RKIND)
+    stat = scan_input_free_field(field)
+
     stat = scan_input_close(handle)
 
     ! deriv_two: 3D, fora do que scan_input suporta (maximo 2D) -- le
@@ -225,6 +251,21 @@ program gen_init_native
         allocate(deriv_two(maxEdges+1,2,nEdges))
         deriv_two = deriv_two_raw(1:maxEdges+1,:,:)
         deallocate(deriv_two_raw)
+    end block
+
+    ! isice_lu: variavel escalar (sem dimensao), fora do que scan_input
+    ! suporta -- le direto via netCDF. Default 24 (Registry.xml,
+    ! core_atmosphere/physics) se por algum motivo ausente do static.nc
+    ! (nao deveria acontecer -- static.nc real sempre tem).
+    block
+        integer :: ncid_isice, varid_isice, stat_isice
+        isice_lu = 24
+        stat_isice = nf90_open(trim(mesh_filename), NF90_NOWRITE, ncid_isice)
+        if (stat_isice == NF90_NOERR) then
+            stat_isice = nf90_inq_varid(ncid_isice, 'isice_lu', varid_isice)
+            if (stat_isice == NF90_NOERR) stat_isice = nf90_get_var(ncid_isice, varid_isice, isice_lu)
+            stat_isice = nf90_close(ncid_isice)
+        end if
     end block
 
     write(0,*) '  nCells=', nCells, ' nEdges=', nEdges, ' maxEdges=', maxEdges
@@ -471,13 +512,16 @@ program gen_init_native
     end where
     snowh = fg_snow * 5.0_RKIND / 1000.0_RKIND
 
-    ! xice/seaice (physics_init_seaice): config_frac_seaice do namelist
-    ! real decide o limiar -- 0.5 (binariza direto o SEAICE bruto) se
-    ! false, 0.02 (mantem fracionario) se true. Reclassificacao de
-    ! celulas de agua muito fria em gelo/terra (ivgtyp/isltyp/snoalb/
-    ! tslb/smois) NAO implementada -- irrelevante pro caso SouthAmerica
-    ! (SEAICE do first-guess e' 0 em toda a malha, confirmado contra o
-    ! dado real), mas pode importar pra malhas em latitude alta.
+    ! xice (limiar inicial, physics_init_sst/physics_init_seaice):
+    ! config_frac_seaice do namelist real decide o limiar -- 0.5 (binariza
+    ! direto o SEAICE bruto) se false, 0.02 (mantem fracionario) se true.
+    ! seaice_out (flag final) e' derivado so' depois, dentro de
+    ! reclassify_seaice (item 3, abaixo) -- que tambem faz a
+    ! reclassificacao em cascata (ivgtyp/isltyp/snoalb/tslb/smois) de
+    ! celulas de agua muito fria em gelo/terra. Irrelevante pro caso
+    ! SouthAmerica (SEAICE do first-guess e' zero em toda a malha,
+    ! confirmado contra o dado real), mas necessario pra malhas em alta
+    ! latitude.
     allocate(xice(nCells), seaice_out(nCells))
     if (cfg % config_frac_seaice) then
         xice_threshold = 0.02_RKIND
@@ -491,11 +535,6 @@ program gen_init_native
         end where
     end if
     where (xice < xice_threshold) xice = 0.0_RKIND
-    where (xice > 0.0_RKIND)
-        seaice_out = 1.0_RKIND
-    elsewhere
-        seaice_out = 0.0_RKIND
-    end where
 
     allocate(vegfra_out(nCells), sfc_albbck_out(nCells))
     call monthly_interp_to_date(nCells, cfg % start_year, cfg % start_month, cfg % start_day, greenfrac, vegfra_out)
@@ -533,6 +572,19 @@ program gen_init_native
                                     fg_tslb, fg_smois, skintemp_out, tmn, zs_out, tslb_out, smois_out)
     end block
 
+    ! Item 3 do plano de fidelidade: reclassificacao de gelo marinho
+    ! (physics_init_sst + physics_init_seaice). Precisa rodar DEPOIS de
+    ! skintemp_out/tmn/vegfra_out/tslb_out/smois_out/sh2o ja calculados
+    ! (pode sobrescrever todos eles pra um subconjunto de celulas) e ANTES
+    ! da escrita do arquivo. No caso validado (SouthAmerica, SEAICE do
+    ! first-guess identicamente zero em toda a malha) nenhuma celula deve
+    ! satisfazer o criterio de reclassificacao -- ver validacao no plano
+    ! de fidelidade.
+    call reclassify_seaice(nCells, nSoilLevels, landmask, isice_lu, &
+                            cfg % config_input_sst, xice_threshold, cfg % config_tsk_seaice_threshold, fg_sst, &
+                            xice, skintemp_out, tmn, ivgtyp, isltyp, snoalb, &
+                            vegfra_out, xland, tslb_out, smois_out, sh2o, seaice_out)
+
     !-----------------------------------------------------------------
     ! 6) Escreve saida
     !-----------------------------------------------------------------
@@ -550,6 +602,9 @@ program gen_init_native
         call defvar1(ncid, 'xland', dimid_nCells)
         call defvar1(ncid, 'xice', dimid_nCells)
         call defvar1(ncid, 'seaice', dimid_nCells)
+        call defvar1_int(ncid, 'ivgtyp', dimid_nCells)
+        call defvar1_int(ncid, 'isltyp', dimid_nCells)
+        call defvar1(ncid, 'snoalb', dimid_nCells)
         call defvar1(ncid, 'snowc', dimid_nCells)
         call defvar1(ncid, 'snowh', dimid_nCells)
         call defvar1(ncid, 'snow', dimid_nCells)
@@ -663,6 +718,9 @@ program gen_init_native
     call putvar1(ncid, 'xland', xland)
     call putvar1(ncid, 'xice', xice)
     call putvar1(ncid, 'seaice', seaice_out)
+    call putvar1_int(ncid, 'ivgtyp', ivgtyp)
+    call putvar1_int(ncid, 'isltyp', isltyp)
+    call putvar1(ncid, 'snoalb', snoalb)
     call putvar1(ncid, 'snowc', snowc)
     call putvar1(ncid, 'snowh', snowh)
     call putvar1(ncid, 'snow', fg_snow)
@@ -726,6 +784,16 @@ program gen_init_native
         ist = nf90_def_var(nc_id, name, NF90_DOUBLE, (/d1/), vid)
     end subroutine defvar1
 
+    ! Item 3: ivgtyp/isltyp sao inteiros no init.nc real (nf90_get_var,
+    ! confirmado contra o arquivo real -- ver plano de fidelidade), nao
+    ! double como todo o resto que este programa escreve ate' agora.
+    subroutine defvar1_int(nc_id, name, d1)
+        integer, intent(in) :: nc_id, d1
+        character(len=*), intent(in) :: name
+        integer :: vid, ist
+        ist = nf90_def_var(nc_id, name, NF90_INT, (/d1/), vid)
+    end subroutine defvar1_int
+
     subroutine defvar2(nc_id, name, d1, d2)
         integer, intent(in) :: nc_id, d1, d2
         character(len=*), intent(in) :: name
@@ -741,6 +809,15 @@ program gen_init_native
         ist = nf90_inq_varid(nc_id, name, vid)
         ist = nf90_put_var(nc_id, vid, arr)
     end subroutine putvar1
+
+    subroutine putvar1_int(nc_id, name, arr)
+        integer, intent(in) :: nc_id
+        character(len=*), intent(in) :: name
+        integer, dimension(:), intent(in) :: arr
+        integer :: vid, ist
+        ist = nf90_inq_varid(nc_id, name, vid)
+        ist = nf90_put_var(nc_id, vid, arr)
+    end subroutine putvar1_int
 
     subroutine putvar2(nc_id, name, arr)
         integer, intent(in) :: nc_id
