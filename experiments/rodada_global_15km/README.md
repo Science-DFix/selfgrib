@@ -141,3 +141,13 @@ Os seis campos mostram estrutura praticamente idêntica entre as duas rotas
 convecção/CAPE elevado sobre a Amazônia, mesmo padrão de OLR — consistente
 com o que já era esperado (a rota nativa não deveria introduzir divergência
 visível numa previsão de 24h a partir do mesmo first-guess).
+
+### Comparação "antes/depois" com o caso original de 60km
+
+`scripts/plot_estilo_original.py` gera, no mesmo estilo/nomes de arquivo do
+caso de 60km em [`docs/resultados_voronoi/`](../../docs/resultados_voronoi/),
+os 9 gráficos equivalentes para a previsão regional `SouthAmerica` recortada
+da malha global de 15km — em
+[`docs/resultados_voronoi_15km/`](../../docs/resultados_voronoi_15km/). A
+comparação lado a lado dos dois conjuntos está no
+[README principal do repositório](../../README.md#antes--depois-mesma-rota-malha-de-origem-60km--15km).
