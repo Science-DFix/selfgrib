@@ -1,12 +1,22 @@
 # selfgrib — rota de interpolação nativa Voronoi-to-Voronoi
 
 > *self* + *GRIB* — porque o MPAS-A vira sua própria fonte de dados, sem
-> precisar de nenhum GRIB externo (GFS, BAM, Eta...). Esta branch
-> (`feature/interpolacao-nativa-voronoi`) vai um passo além: em vez de
-> passar por uma grade lat-lon intermediária e pelo formato binário do
-> WPS, interpola **diretamente entre a malha de Voronoi nativa de
-> origem e a de destino**, escrevendo `init.nc`/`lbc.*.nc` prontos para
-> o `mpas_atmosphere`.
+> precisar de nenhum GRIB externo (GFS, BAM, Eta...). A rota nativa vai
+> um passo além: em vez de passar por uma grade lat-lon intermediária e
+> pelo formato binário do WPS, interpola **diretamente entre a malha de
+> Voronoi nativa de origem e a de destino**, escrevendo
+> `init.nc`/`lbc.*.nc` prontos para o `mpas_atmosphere`.
+
+Esta branch (`chore/reorganiza-estrutura-core`) é a continuação direta de
+`feature/interpolacao-nativa-voronoi` (onde a rota nativa foi implementada e
+validada pela primeira vez): reorganiza tudo que antes vivia solto na raiz
+do repositório (`scripts/`, `mpas2intermediate/`, `convert_mpas/`,
+`MPAS-Limited-Area/`) dentro de uma única pasta `core/` com uma separação
+clara — código próprio (`core/src`), dependências de terceiros
+vendorizadas (`core/vendor`) e orquestração (`core/pipeline`) — e adiciona
+um experimento real, ponta-a-ponta, em produção: uma malha global própria
+de **15km** (não mais 60km), comparada lado a lado com 60km na mesma data
+em [`experiments/rodada_global_15km/`](experiments/rodada_global_15km/).
 
 ## O que é isso
 
@@ -98,67 +108,19 @@ mesmo caso de validação original (`2026-01-01`) usado na seção seguinte
 para a checagem numérica campo-a-campo contra o `init.nc`/`lbc.*.nc` de
 referência.*
 
-## Resultado que essa rota pode produzir
+## Validação numérica
 
-A partir de uma malha global de origem e da malha regional `SouthAmerica`
-(recorte de `x1.163842`, ~60km), gerando `init.nc`/`lbc.*.nc` diretamente
-por esta rota (sem WPS, sem `init_atmosphere_model` original) e rodando o
-`mpas_atmosphere` real a partir deles: uma previsão de 24h fisicamente sã,
-a partir de `2026-01-01_00`.
-
-<table>
-<tr>
-<td width="50%">
-<img src="docs/resultados_voronoi/00_dominio_terreno_lbc.png" alt="Domínio e terreno"><br>
-<sub><b>Domínio da malha regional</b>: terreno (m) e zona de fronteira/relaxamento (LBC) em vermelho.</sub>
-</td>
-<td width="50%">
-<img src="docs/resultados_voronoi/01_malha_nativa_zoom_cape.png" alt="Malha nativa hexagonal"><br>
-<sub><b>Malha nativa MPAS</b>: células de Voronoi reais (hexágonos/pentágonos, sem suavização), zoom na Amazônia central, coloridas por CAPE em +24h.</sub>
-</td>
-</tr>
-<tr>
-<td width="50%">
-<img src="docs/resultados_voronoi/02_mslp_vento10m_24h.png" alt="MSLP e vento 10m"><br>
-<sub><b>Pressão ao nível do mar + vento a 10m</b> em +24h — ciclone extratropical bem definido no sul.</sub>
-</td>
-<td width="50%">
-<img src="docs/resultados_voronoi/04_geopotencial_vento_500hPa_24h.png" alt="Geopotencial 500hPa"><br>
-<sub><b>Altura geopotencial e vento em 500 hPa</b> — jato subtropical visível.</sub>
-</td>
-</tr>
-<tr>
-<td width="50%">
-<img src="docs/resultados_voronoi/05_precipitacao_acumulada_24h.png" alt="Precipitação acumulada 24h"><br>
-<sub><b>Precipitação acumulada em 24h</b> — máximo no Chocó/vertente andina, padrão fisicamente coerente.</sub>
-</td>
-<td width="50%">
-<img src="docs/resultados_voronoi/06_cape_24h.png" alt="CAPE 24h"><br>
-<sub><b>CAPE</b> ao final das 24h — máximo amazônico consistente com ciclo diurno convectivo.</sub>
-</td>
-</tr>
-<tr>
-<td width="50%">
-<img src="docs/resultados_voronoi/03_temperatura_2m_24h.png" alt="Temperatura 2m"><br>
-<sub><b>Temperatura a 2m</b> válida em +24h.</sub>
-</td>
-<td width="50%">
-<img src="docs/resultados_voronoi/07_olr_24h.png" alt="OLR"><br>
-<sub><b>Radiação de onda longa no topo da atmosfera (OLR)</b> — proxy de convecção profunda.</sub>
-</td>
-</tr>
-</table>
-
-<img src="docs/resultados_voronoi/08_evolucao_precip_cape_cin.png" alt="Evolução temporal precip/CAPE/CIN" width="70%">
-
-*Evolução temporal (0–24h) de precipitação, CAPE e CIN médios no domínio —
-crescimento físico acompanhando o ciclo diurno CAPE-cima/CIN-baixo.*
-
-Essas figuras vêm diretamente da saída (`diag.*.nc`) da mesma previsão
-usada para validar a rota nativa — ver
-[`core/pipeline/native/README.md`](core/pipeline/native/README.md) para a
-orquestração completa e o relatório técnico local
-(`doc_voronoi/relatorio_tecnico/`) para a validação numérica campo a campo.
+Antes de qualquer previsão real, a rota foi validada campo a campo: o
+`init.nc`/`lbc.*.nc` gerados por ela foram comparados diretamente contra os
+arquivos reais de produção (mesmo caso, malha `SouthAmerica`/60km,
+`2026-01-01_00`) — erro nulo ou desprezível em praticamente todos os
+campos. Essa validação numérica completa (metodologia, tabelas de erro por
+campo, os bugs reais encontrados no processo) está no relatório técnico
+local (`doc_voronoi/relatorio_tecnico/`) e resumida em
+[`core/pipeline/native/README.md`](core/pipeline/native/README.md). A
+validação *funcional* — rodar o `mpas_atmosphere` de verdade a partir
+desses arquivos e obter uma previsão fisicamente sã — é o que a seção
+anterior mostra, agora com dois exemplos reais (60km e 15km) em vez de um.
 
 ## Documentação científica completa
 
@@ -181,6 +143,10 @@ abordagem (`doc_voronoi/prototipo_scatter/`).
 
 ## Estrutura do repositório
 
+Reorganizada nesta branch — antes, `scripts/`, `mpas2intermediate/`,
+`convert_mpas/` e `MPAS-Limited-Area/` viviam soltos na raiz, sem separar
+código próprio de dependência vendorizada. Agora:
+
 ```
 core/                     -- ferramenta unica: codigo proprio + dependencias + orquestracao
   Makefile                          -- builda vendor/ e depois src/, em ordem
@@ -194,11 +160,20 @@ core/                     -- ferramenta unica: codigo proprio + dependencias + o
     01_recorta_regiao.bash            -- reusado por ambas as rotas
     native/                           -- rota recomendada/validada (esta branch), ver pipeline/native/README.md
     legacy/                           -- rota antiga via WPS, mantida como referencia/comparacao
+experiments/
+  rodada_global_15km/                -- experimento real ponta-a-ponta: malha global propria 15km,
+                                          previsao global 24h, e a rota nativa alimentada por ela
+                                          (README proprio com pre-requisitos, bugs reais corrigidos
+                                          rodando pela primeira vez, instrucoes de reproducao)
 doc_voronoi/
   relatorio_tecnico/                -- documento científico completo (LaTeX, apenas local, fora do git)
   *.pdf                             -- artigos de referência
   prototipo_scatter/                -- protótipo inicial que validou o método
-docs/                    -- referências técnicas gerais do MPAS-A (manuais, notas)
+docs/
+  resultados_voronoi/               -- galeria do caso de validacao original (60km, 2026-01-01)
+  resultados_voronoi_60km_mesmodia/ -- mesmos 9 graficos, 60km, mesma data da rodada de 15km
+  resultados_voronoi_15km/          -- global 15km x regional nativo, lado a lado
+  *.pdf                             -- referências técnicas gerais do MPAS-A (manuais, notas)
 ```
 
 ## Compilação
@@ -215,7 +190,14 @@ Isso gera, entre outros, os binários usados pela rota nativa:
 `gen_lbc_native` (e os da rota antiga: `extract_fields`,
 `pack_intermediate`). Requer um compilador Fortran (testado com
 `gfortran`) e as bibliotecas NetCDF-C/NetCDF-Fortran (`nf-config` no
-`PATH`).
+`PATH`) — não precisa de MPI para compilar, os binários rodam seriais
+(só o `mpas_atmosphere`/`init_atmosphere_model` originais, chamados
+depois pelos scripts de orquestração, são paralelos).
+
+Também é preciso ter o **NCO** (`ncks`) no `PATH` para rodar o passo 4
+(`04_gera_init_native.bash` mescla campos estáticos com `ncks -A`) — não é
+compilado por este `make`, normalmente já vem no ambiente de HPC de
+geociências (`module load nco` ou equivalente).
 
 ## Como rodar (rota nativa)
 
@@ -242,6 +224,12 @@ variáveis de ambiente com defaults sensatos — rode sem nada exportado
 para reproduzir o caso de validação (`SouthAmerica`, ~60km, 24h a
 partir de `2026-01-01_00`) documentado no relatório técnico.
 
+Isso cobre a rota em si — para um exemplo real, testado, com os scripts
+`.pbs` de submissão (PBS + MPICH), a geração de uma malha global própria do
+zero e a lista de bugs reais encontrados/corrigidos rodando pela primeira
+vez numa resolução nova, ver
+[`experiments/rodada_global_15km/README.md`](experiments/rodada_global_15km/README.md).
+
 ## A rota original (via WPS)
 
 Ainda presente neste repositório, sem alteração de lógica (só de
@@ -262,9 +250,27 @@ Nasceu de uma pergunta simples: "dá pra gerar condição inicial do
 MPAS-A usando uma rodada global do próprio MPAS-A, em vez de depender
 de GRIB externo?" A resposta foi sim (rota original, via WPS). Uma
 segunda pergunta, motivada por uma limitação estrutural encontrada no
-caminho, levou a esta branch: "dá pra eliminar também a grade
+caminho, levou à rota nativa: "dá pra eliminar também a grade
 intermediária, interpolando direto entre as duas malhas de Voronoi?" A
 resposta, depois de investigar o código-fonte real do
 `init_atmosphere_model`, comparar numericamente contra arquivos de
 produção reais, e finalmente rodar o `mpas_atmosphere` de verdade a
-partir do resultado, também foi sim.
+partir do resultado, também foi sim — validado na malha de referência
+(`SouthAmerica`, ~60km).
+
+Uma terceira pergunta motivou esta branch: "essa rota funciona só nessa
+malha/caso específico já validado, ou generaliza de verdade?" Duas
+respostas: primeiro, uma reorganização estrutural (esta branch,
+`chore/reorganiza-estrutura-core`) que separa código próprio de
+dependência vendorizada — pré-requisito para o repositório crescer sem
+virar uma pasta única de scripts soltos. Segundo, um teste real fora do
+caso de validação original: baixar e rodar uma malha global própria em
+**15km** (16× mais células que 60km, nunca testada nesta rota antes) do
+zero — gerar o invariant, rodar a previsão global de 24h, e alimentar a
+mesma rota nativa com ela — encontrando e corrigindo, no processo, bugs
+reais que só apareceriam numa malha maior (limite de tamanho do NetCDF
+clássico, colisão de variável de ambiente entre passos, e outros
+documentados em [`experiments/rodada_global_15km/README.md`](experiments/rodada_global_15km/README.md)).
+A resposta: sim, generaliza — mesma estrutura sinótica reproduzida em
+duas resoluções de origem diferentes, comparável lado a lado no topo
+deste README.
