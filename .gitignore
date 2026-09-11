@@ -34,3 +34,5 @@ core/vendor/limited_area/*.graph.info
 # saidas de rodada (nao versionar dados/resultados)
 /tmp/
 *.log
+
+__pycache__/

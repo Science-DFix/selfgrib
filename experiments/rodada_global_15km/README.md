@@ -115,8 +115,29 @@ quem for adaptar estes scripts para outra malha/resolução:
 
 ## Resultados
 
-_[A preencher: comparação/plots entre a previsão global 15km e o teste
-Voronoi-to-Voronoi regional a partir dela — datas diferentes do caso 60km
-documentado no README principal, então não é uma comparação direta 15km vs
-60km, mas sim uma validação de que a rota nativa funciona alimentada por uma
-previsão global própria, não só por GFS.]_
+Gerados por `scripts/plot_resultados.py` a partir dos `diag.*.nc` das duas
+previsões (`t=24h`, válido 2026-02-01 00Z), lendo a malha global (15km,
+2.621.442 células) e a malha regional (`SouthAmerica`, 233.732 células,
+recortada da própria malha global) diretamente pelas coordenadas nativas
+(`latCell`/`lonCell`), sem passar por WPS/GFS na etapa regional.
+
+Não é uma comparação com o caso de 60km já documentado no README principal
+(datas diferentes, não há como comparar diretamente) — é uma validação de
+que a rota nativa Voronoi-to-Voronoi reproduz fielmente a física da
+previsão global usada como first-guess, agora numa malha própria (15km) em
+vez do GFS usado no teste original.
+
+| Campo | Global 15km × Regional nativo |
+|---|---|
+| MSLP + vento 10m | ![](../../docs/resultados_15km_voronoi/01_mslp_vento10m_24h.png) |
+| Temperatura 2m | ![](../../docs/resultados_15km_voronoi/02_temperatura_2m_24h.png) |
+| Geopotencial 500hPa + vento | ![](../../docs/resultados_15km_voronoi/03_geopotencial_vento500_24h.png) |
+| Precipitação acumulada 24h | ![](../../docs/resultados_15km_voronoi/04_precipitacao_acumulada_24h.png) |
+| CAPE | ![](../../docs/resultados_15km_voronoi/05_cape_24h.png) |
+| OLR | ![](../../docs/resultados_15km_voronoi/06_olr_24h.png) |
+
+Os seis campos mostram estrutura praticamente idêntica entre as duas rotas
+— mesmo vórtice de baixos geopotenciais em ~40°S/50°W, mesma banda de
+convecção/CAPE elevado sobre a Amazônia, mesmo padrão de OLR — consistente
+com o que já era esperado (a rota nativa não deveria introduzir divergência
+visível numa previsão de 24h a partir do mesmo first-guess).
