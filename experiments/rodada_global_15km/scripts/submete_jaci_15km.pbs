@@ -1,0 +1,33 @@
+#!/bin/bash
+#PBS -S /bin/bash
+#PBS -q pesqextra
+#PBS -l select=1:ncpus=256
+#PBS -l place=excl
+#PBS -l walltime=06:00:00
+#PBS -N MPAS_15km_Sequence
+#PBS -j oe
+#PBS -o MPAS_15km_Sequence.out
+
+# ==============================================================================
+# Adaptado de submete_jaci.pbs (malha 60km) para a malha global 15km.
+# A malha 15km tem ~16x mais celulas que a 60km e usa dt 4x menor, entao
+# o custo computacional total e bem maior: select=1:ncpus=256 usa todos os
+# cores fisicos de 1 no (ver Mpich_hydra_jaci_optimization.MD -- NUNCA usar
+# select=2 com MPICH no Jaci, causa falha de SSH inter-no) e walltime de 6h
+# e um ponto de partida conservador; ajuste apos a primeira rodada real.
+#
+# REPRODUCAO EM OUTRO AMBIENTE: ajuste os dois caminhos abaixo (ENV_ALL e o
+# `cd`) e, se necessario, exporte DIR_ROOT/DIR_BASE antes do `cd` -- os
+# scripts chamados (master_run_15km.bash e os que ele chama) leem
+# DIR_ROOT/DIR_BASE/etc via ${VAR:-default}, entao um `export DIR_ROOT=...`
+# aqui e suficiente para apontar tudo para outro cluster/diretorio.
+# ==============================================================================
+
+source /lustre/projetos/satdas/diego_workdir/env_wrf_wps.bash
+export GFORTRAN_CONVERT_UNIT='big_endian:101-200'
+
+export NP=256
+
+cd /lustre/projetos/satdas/diego_workdir/SOURCE/rodada_global_15km/scripts || exit 1
+
+./master_run_15km.bash

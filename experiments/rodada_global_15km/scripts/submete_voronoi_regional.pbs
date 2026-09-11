@@ -1,0 +1,27 @@
+#!/bin/bash
+#PBS -S /bin/bash
+#PBS -q pesqextra
+#PBS -l select=1:ncpus=256
+#PBS -l place=excl
+#PBS -l walltime=04:00:00
+#PBS -N Voronoi_Regional_15km
+#PBS -j oe
+#PBS -o Voronoi_Regional_15km.out
+
+# ==============================================================================
+# Roda o pipeline nativo Voronoi-to-Voronoi (selfgrib) usando a previsao
+# global 15km como first-guess, gerando a previsao regional SouthAmerica.
+# Pre-requisito: core/src ja compilado (ver instrucoes de compilacao).
+#
+# REPRODUCAO EM OUTRO AMBIENTE: ajuste os dois caminhos abaixo (ENV_ALL e o
+# `cd`); master_voronoi_regional.bash le DIR_ROOT/DIR_BASE/etc via
+# ${VAR:-default}, entao um `export DIR_ROOT=...` aqui basta para apontar
+# tudo para outro cluster/diretorio.
+# ==============================================================================
+
+source /lustre/projetos/satdas/diego_workdir/env_wrf_wps.bash
+export GFORTRAN_CONVERT_UNIT='big_endian:101-200'
+
+cd /lustre/projetos/satdas/diego_workdir/SOURCE/rodada_global_15km/scripts || exit 1
+
+./master_voronoi_regional.bash

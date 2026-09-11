@@ -1,0 +1,15 @@
+<streams>
+
+<immutable_stream name="input"
+                  type="input"
+                  filename_template="x1.2621442.static.nc"
+                  input_interval="initial_only" />
+
+<immutable_stream name="output"
+                  type="output"
+                  filename_template="x1.2621442.init.nc"
+                  io_type="pnetcdf,cdf5"
+                  packages="initial_conds"
+                  output_interval="initial_only" />
+
+</streams>

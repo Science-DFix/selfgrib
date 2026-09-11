@@ -1,0 +1,14 @@
+&share
+ wrf_core = 'ARW',
+ max_dom = 1,
+ start_date = 'YYYY-MM-DD_HH:00:00',
+ end_date   = 'YYYY-MM-DD_HH:00:00',
+ interval_seconds = 10800
+/
+&ungrib
+ out_format = 'WPS',
+ prefix = 'FILE',
+/
+&metgrid
+ fg_name = 'FILE'
+/

@@ -1,0 +1,44 @@
+&nhyd_model
+    config_dt                        = 90.0
+    config_start_time                = 'YYYY-MM-DD_HH:00:00'
+    config_run_duration              = 'DD_HH:MM:SS'
+    config_split_dynamics_transport  = true
+    config_number_of_sub_steps       = 2
+    config_dynamics_split_steps      = 3
+    config_horiz_mixing              = '2d_smagorinsky'
+    config_len_disp                  = 15000.0
+    config_visc4_2dsmag              = 0.05
+    config_coef_3rd_order            = 0.25
+    config_epssm                     = 0.1
+    config_smdiv                     = 0.1
+/
+&damping
+    config_zd    = 22000.0
+    config_xnutr = 0.2
+/
+&limited_area
+    config_apply_lbcs = false
+/
+&restart
+    config_do_restart = false
+/
+&decomposition
+    config_block_decomp_file_prefix = 'x1.2621442.graph.info.part.'
+/
+&physics
+    config_physics_suite   = 'mesoscale_reference'
+    config_radtlw_interval = '00:30:00'
+    config_radtsw_interval = '00:30:00'
+    config_sst_update      = false
+/
+&IAU
+    config_IAU_option          = 'off'
+    config_IAU_window_length_s = 21600.
+/
+&assimilation
+    config_jedi_da = true
+/
+&io
+    config_pio_num_iotasks = 0
+    config_pio_stride      = 1
+/
