@@ -142,12 +142,26 @@ convecção/CAPE elevado sobre a Amazônia, mesmo padrão de OLR — consistente
 com o que já era esperado (a rota nativa não deveria introduzir divergência
 visível numa previsão de 24h a partir do mesmo first-guess).
 
-### Comparação "antes/depois" com o caso original de 60km
+### Comparação "antes/depois" -- mesma data, 60km vs 15km
 
-`scripts/plot_estilo_original.py` gera, no mesmo estilo/nomes de arquivo do
-caso de 60km em [`docs/resultados_voronoi/`](../../docs/resultados_voronoi/),
-os 9 gráficos equivalentes para a previsão regional `SouthAmerica` recortada
-da malha global de 15km — em
-[`docs/resultados_voronoi_15km/`](../../docs/resultados_voronoi_15km/). A
-comparação lado a lado dos dois conjuntos está no
-[README principal do repositório](../../README.md#antes--depois-mesma-rota-malha-de-origem-60km--15km).
+Para uma comparação justa (mesma data, não só mesmo estilo de gráfico),
+rodou-se a mesma rota nativa alimentada por uma malha de origem **60km**,
+usando a rodada de produção já existente
+`dataout/PREV_MPAS/2026013100` (mesma data `2026-01-31_00` da rodada 15km)
+como first-guess -- não precisou rodar o MPAS global de novo, só o
+pipeline regional (`scripts/master_voronoi_regional_60km.bash` +
+`scripts/submete_voronoi_regional_60km.pbs`, passos 2-6 apenas: reusa o
+recorte estático `SouthAmerica.static.nc`/`.graph.info.part.*` já existente
+em `ungrib_to_mpas/recortes/SouthAmerica/`, copiado para
+`recorte_SouthAmerica_60km/` -- **diretório separado do caso original de
+validação (`2026-01-01`, documentado no README principal), para não
+sobrescrever aqueles resultados**).
+
+`scripts/plot_estilo_original.py` (parametrizado: aceita o subdiretório do
+recorte regional e o rótulo da malha como argumentos) gera os mesmos 9
+gráficos para as duas rodadas:
+[`docs/resultados_voronoi_60km_mesmodia/`](../../docs/resultados_voronoi_60km_mesmodia/)
+(60km, mesma data) e
+[`docs/resultados_voronoi_15km/`](../../docs/resultados_voronoi_15km/)
+(15km). A comparação lado a lado está no
+[README principal do repositório](../../README.md#antes--depois-mesma-rota-mesmo-dia-malha-de-origem-60km--15km).

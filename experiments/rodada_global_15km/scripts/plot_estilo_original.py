@@ -6,7 +6,10 @@ em docs/resultados_voronoi/ para o caso original de 60km -- mesmo estilo
 (sem gridlines/eixos numerados, mesmos titulos, mesmos nomes de arquivo),
 para permitir comparacao direta "antes (60km) / depois (15km)".
 
-Uso: python3 plot_estilo_original.py [DIR_BASE] [OUT_DIR]
+Uso: python3 plot_estilo_original.py [DIR_BASE] [OUT_DIR] [SUBDIR_REGIONAL] [ROTULO_MALHA]
+  SUBDIR_REGIONAL: nome do subdiretorio dentro de DIR_BASE com o recorte
+                   regional (default: recorte_SouthAmerica, o caso 15km)
+  ROTULO_MALHA   : texto entre parenteses no titulo (default: "malha global 15km")
 """
 import sys
 import os
@@ -25,8 +28,10 @@ RAD2DEG = 180.0 / np.pi
 
 DIR_BASE = sys.argv[1] if len(sys.argv) > 1 else "/mnt/dados2/SOURCE/rodada_global_15km"
 OUT_DIR = sys.argv[2] if len(sys.argv) > 2 else "docs/resultados_voronoi_15km"
+SUBDIR_REGIONAL = sys.argv[3] if len(sys.argv) > 3 else "recorte_SouthAmerica"
+ROTULO_MALHA = sys.argv[4] if len(sys.argv) > 4 else "malha global 15km"
 
-DIR_REG = f"{DIR_BASE}/recorte_SouthAmerica"
+DIR_REG = f"{DIR_BASE}/{SUBDIR_REGIONAL}"
 STATIC = f"{DIR_REG}/SouthAmerica.static.nc"
 FCST_DIR = f"{DIR_REG}/forecast_run_native"
 DIAG_INIT = f"{FCST_DIR}/diag.2026-01-31_00.00.00.nc"
@@ -109,7 +114,7 @@ def plot_00_dominio_terreno(lat, lon, ter, bdy):
     cbar.set_label("Altitude do terreno (m)")
     ax.set_title(
         "Domínio SouthAmerica — terreno e zona de fronteira/relaxamento (LBC, vermelho)\n"
-        "rota nativa voronoi-to-voronoi (malha global 15km)"
+        f"rota nativa voronoi-to-voronoi ({ROTULO_MALHA})"
     )
     save(fig, "00_dominio_terreno_lbc.png")
 
@@ -155,7 +160,7 @@ def plot_01_malha_zoom(ds, cape):
     cbar.set_label(f"CAPE (J/kg), válido {VALID_LABEL} (+24h)")
     ax.set_title(
         "Malha nativa MPAS (células de Voronoi reais), zoom Amazônia central\n"
-        "rota nativa — sem grade lat-lon intermediária (malha global 15km)"
+        f"rota nativa — sem grade lat-lon intermediária ({ROTULO_MALHA})"
     )
     save(fig, "01_malha_nativa_zoom_cape.png")
 
@@ -176,7 +181,7 @@ def plot_02_mslp(lat, lon):
     )
     cbar = fig.colorbar(mesh, ax=ax, fraction=0.045, pad=0.04)
     cbar.set_label("Pressão ao nível do mar (hPa)")
-    ax.set_title(f"MSLP + vento a 10m, válido {VALID_LABEL} (+24h)\nrota nativa voronoi-to-voronoi (malha global 15km)")
+    ax.set_title(f"MSLP + vento a 10m, válido {VALID_LABEL} (+24h)\nrota nativa voronoi-to-voronoi ({ROTULO_MALHA})")
     save(fig, "02_mslp_vento10m_24h.png")
 
 
@@ -187,7 +192,7 @@ def plot_03_t2m(lat, lon):
     mesh = ax.contourf(lon_g, lat_g, Z, levels=np.linspace(-4.5, 40.5, 21), cmap="nipy_spectral", transform=ccrs.PlateCarree(), extend="both")
     cbar = fig.colorbar(mesh, ax=ax, fraction=0.045, pad=0.04)
     cbar.set_label("Temperatura a 2m (°C)")
-    ax.set_title(f"Temperatura a 2m, válido {VALID_LABEL} (+24h)\nrota nativa voronoi-to-voronoi (malha global 15km)")
+    ax.set_title(f"Temperatura a 2m, válido {VALID_LABEL} (+24h)\nrota nativa voronoi-to-voronoi ({ROTULO_MALHA})")
     save(fig, "03_temperatura_2m_24h.png")
 
 
@@ -207,7 +212,7 @@ def plot_04_z500(lat, lon):
     )
     cbar = fig.colorbar(mesh, ax=ax, fraction=0.045, pad=0.04)
     cbar.set_label("Altura geopotencial em 500 hPa (m)")
-    ax.set_title(f"Altura geopotencial e vento em 500 hPa, válido {VALID_LABEL} (+24h)\nrota nativa voronoi-to-voronoi (malha global 15km)")
+    ax.set_title(f"Altura geopotencial e vento em 500 hPa, válido {VALID_LABEL} (+24h)\nrota nativa voronoi-to-voronoi ({ROTULO_MALHA})")
     save(fig, "04_geopotencial_vento_500hPa_24h.png")
 
 
@@ -227,7 +232,7 @@ def plot_05_precip(lat, lon):
     mesh = ax.contourf(lon_g, lat_g, Z, levels=bounds, colors=colors, norm=norm, transform=ccrs.PlateCarree(), extend="max")
     cbar = fig.colorbar(mesh, ax=ax, fraction=0.045, pad=0.04, boundaries=bounds, spacing="uniform")
     cbar.set_label("Precipitação acumulada em 24h (mm)")
-    ax.set_title("Precipitação acumulada em 24h (rainc+rainnc)\nrota nativa voronoi-to-voronoi (malha global 15km)")
+    ax.set_title(f"Precipitação acumulada em 24h (rainc+rainnc)\nrota nativa voronoi-to-voronoi ({ROTULO_MALHA})")
     save(fig, "05_precipitacao_acumulada_24h.png")
 
 
@@ -239,7 +244,7 @@ def plot_06_cape(lat, lon):
     mesh = ax.contourf(lon_g, lat_g, Z, levels=np.linspace(0, 3600, 21), cmap="gist_heat_r", transform=ccrs.PlateCarree(), extend="max")
     cbar = fig.colorbar(mesh, ax=ax, fraction=0.045, pad=0.04)
     cbar.set_label("CAPE (J/kg)")
-    ax.set_title(f"CAPE, válido {VALID_LABEL} (+24h)\nrota nativa voronoi-to-voronoi (malha global 15km)")
+    ax.set_title(f"CAPE, válido {VALID_LABEL} (+24h)\nrota nativa voronoi-to-voronoi ({ROTULO_MALHA})")
     save(fig, "06_cape_24h.png")
     return cape
 
@@ -251,7 +256,7 @@ def plot_07_olr(lat, lon):
     mesh = ax.contourf(lon_g, lat_g, Z, levels=np.linspace(80, 320, 21), cmap="gray_r", transform=ccrs.PlateCarree(), extend="both")
     cbar = fig.colorbar(mesh, ax=ax, fraction=0.045, pad=0.04)
     cbar.set_label("OLR no topo da atmosfera (W/m²)")
-    ax.set_title(f"Radiação de onda longa no topo (OLR), válido {VALID_LABEL} (+24h)\nrota nativa voronoi-to-voronoi (malha global 15km)")
+    ax.set_title(f"Radiação de onda longa no topo (OLR), válido {VALID_LABEL} (+24h)\nrota nativa voronoi-to-voronoi ({ROTULO_MALHA})")
     save(fig, "07_olr_24h.png")
 
 
@@ -282,7 +287,7 @@ def plot_08_evolucao():
     ax1.legend(handles=[l1, l2, l3], loc="upper left")
     ax1.set_title(
         "Evolução temporal (0-24h): precipitação, CAPE e CIN médios no domínio\n"
-        "rota nativa voronoi-to-voronoi (malha global 15km)"
+        f"rota nativa voronoi-to-voronoi ({ROTULO_MALHA})"
     )
     save(fig, "08_evolucao_precip_cape_cin.png")
 

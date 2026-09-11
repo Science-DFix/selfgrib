@@ -1,0 +1,23 @@
+#!/bin/bash
+#PBS -S /bin/bash
+#PBS -q pesqextra
+#PBS -l select=1:ncpus=32
+#PBS -l place=excl
+#PBS -l walltime=02:00:00
+#PBS -N Voronoi_Regional_60km
+#PBS -j oe
+#PBS -o Voronoi_Regional_60km.out
+
+# ==============================================================================
+# Roda o pipeline nativo Voronoi-to-Voronoi (selfgrib) usando a rodada global
+# de PRODUCAO 60km (dataout/PREV_MPAS/2026013100) como first-guess, na MESMA
+# data da rodada 15km, para comparacao direta.
+# Pre-requisito: core/src ja compilado (mesmo binario usado para 15km).
+# ==============================================================================
+
+source /lustre/projetos/satdas/diego_workdir/env_wrf_wps.bash
+export GFORTRAN_CONVERT_UNIT='big_endian:101-200'
+
+cd /lustre/projetos/satdas/diego_workdir/SOURCE/rodada_global_15km/scripts || exit 1
+
+./master_voronoi_regional_60km.bash

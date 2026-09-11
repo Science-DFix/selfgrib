@@ -44,54 +44,59 @@ contra arquivos reais de produção; e funcionalmente, executando o
 `mpas_atmosphere` real a partir dos arquivos gerados por esta rota e
 obtendo uma previsão de 24h fisicamente sã, sem erros.
 
-## Antes / depois: mesma rota, malha de origem 60km → 15km
+## Antes / depois: mesma rota, mesmo dia, malha de origem 60km → 15km
 
-A rota nativa foi validada primeiro alimentada por uma rodada global de
-**60km** (`x1.163842`, GFS como first-guess indireto). Depois, rodou-se uma
-previsão global própria em **15km** (`x1.2621442`, ~16× mais células) e
-usou-se essa previsão — não mais GFS — como first-guess da mesma rota
-nativa, prevendo a mesma região `SouthAmerica`. Datas diferentes entre os
-dois casos (não é uma verificação par-a-par), mas a estrutura sinótica é
-comparável: mesmo tipo de sistema (ciclone extratropical + jato subtropical
-+ convecção amazônica), agora numa malha de origem 4× mais fina.
-Detalhes completos do experimento de 15km em
+Comparação justa: **mesma data** (`2026-01-31_00` + 24h), **mesma região**
+(`SouthAmerica`) e **mesma rota nativa**, variando só a malha global de
+origem do first-guess — a rodada de produção em **60km** (`x1.163842`,
+GFS como first-guess indireto) contra uma previsão global própria em
+**15km** (`x1.2621442`, ~16× mais células). Detalhes completos do
+experimento de 15km em
 [`experiments/rodada_global_15km/README.md`](experiments/rodada_global_15km/README.md).
 
 <table>
 <tr><th width="50%">Malha de origem 60km</th><th width="50%">Malha de origem 15km</th></tr>
 <tr>
-<td><img src="docs/resultados_voronoi/02_mslp_vento10m_24h.png" alt="MSLP 60km"></td>
+<td><img src="docs/resultados_voronoi_60km_mesmodia/02_mslp_vento10m_24h.png" alt="MSLP 60km"></td>
 <td><img src="docs/resultados_voronoi_15km/02_mslp_vento10m_24h.png" alt="MSLP 15km"></td>
 </tr>
 <tr>
-<td><img src="docs/resultados_voronoi/03_temperatura_2m_24h.png" alt="T2m 60km"></td>
+<td><img src="docs/resultados_voronoi_60km_mesmodia/03_temperatura_2m_24h.png" alt="T2m 60km"></td>
 <td><img src="docs/resultados_voronoi_15km/03_temperatura_2m_24h.png" alt="T2m 15km"></td>
 </tr>
 <tr>
-<td><img src="docs/resultados_voronoi/04_geopotencial_vento_500hPa_24h.png" alt="Z500 60km"></td>
+<td><img src="docs/resultados_voronoi_60km_mesmodia/04_geopotencial_vento_500hPa_24h.png" alt="Z500 60km"></td>
 <td><img src="docs/resultados_voronoi_15km/04_geopotencial_vento_500hPa_24h.png" alt="Z500 15km"></td>
 </tr>
 <tr>
-<td><img src="docs/resultados_voronoi/05_precipitacao_acumulada_24h.png" alt="Precip 60km"></td>
+<td><img src="docs/resultados_voronoi_60km_mesmodia/05_precipitacao_acumulada_24h.png" alt="Precip 60km"></td>
 <td><img src="docs/resultados_voronoi_15km/05_precipitacao_acumulada_24h.png" alt="Precip 15km"></td>
 </tr>
 <tr>
-<td><img src="docs/resultados_voronoi/06_cape_24h.png" alt="CAPE 60km"></td>
+<td><img src="docs/resultados_voronoi_60km_mesmodia/06_cape_24h.png" alt="CAPE 60km"></td>
 <td><img src="docs/resultados_voronoi_15km/06_cape_24h.png" alt="CAPE 15km"></td>
 </tr>
 <tr>
-<td><img src="docs/resultados_voronoi/07_olr_24h.png" alt="OLR 60km"></td>
+<td><img src="docs/resultados_voronoi_60km_mesmodia/07_olr_24h.png" alt="OLR 60km"></td>
 <td><img src="docs/resultados_voronoi_15km/07_olr_24h.png" alt="OLR 15km"></td>
 </tr>
 <tr>
-<td><img src="docs/resultados_voronoi/01_malha_nativa_zoom_cape.png" alt="Malha 60km"></td>
+<td><img src="docs/resultados_voronoi_60km_mesmodia/01_malha_nativa_zoom_cape.png" alt="Malha 60km"></td>
 <td><img src="docs/resultados_voronoi_15km/01_malha_nativa_zoom_cape.png" alt="Malha 15km"></td>
 </tr>
 </table>
 
-A malha de Voronoi real (última linha, mesmo recorte da Amazônia central)
-deixa a diferença de resolução mais explícita que qualquer campo
-meteorológico: hexágonos ~4× menores lado a lado, célula a célula.
+Com a mesma data, dá pra ver diferenças reais de resolução, não só de
+malha: o vórtice de baixa pressão no sul fica mais definido e intenso em
+15km (60km mostra um padrão mais suave/alongado na mesma região), e a
+malha de Voronoi real (última linha, mesmo recorte da Amazônia central)
+mostra os hexágonos ~4× menores lado a lado, célula a célula.
+
+*Nota: o resultado de 60km acima vem da rota nativa alimentada pela
+mesma rodada de produção 60km/GFS usada operacionalmente — não é o
+mesmo caso de validação original (`2026-01-01`) usado na seção seguinte
+para a checagem numérica campo-a-campo contra o `init.nc`/`lbc.*.nc` de
+referência.*
 
 ## Resultado que essa rota pode produzir
 
